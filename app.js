@@ -1965,29 +1965,65 @@ window.addEventListener('resize',()=>renderGrid());
   updatePages();
 
   // Seed a starter design
-  const welcome = mkEl('text', 80, 80, 640, 320);
-  Object.assign(welcome, {
-    name: 'Welcome Card',
-    text:
-  `Welcome to Canvus
+ // --- Seed: Welcome card only ---
+  const card = mkEl('rect', 96, 96, 720, 360);
+  card.name = 'Welcome Card';
+  card.rx = 20;
+  card.fills = [mkFill('#ffffff', 1)];
 
-  A beginner-first UX canvas made in Europe — built to teach good UX habits while you design.
+  const title = mkEl('text', 128, 128, 656, 44);
+  Object.assign(title, {
+    name: 'Title',
+    text: '🚀 Welcome to Canvus',
+    fontSize: 30,
+    lineHeight: 38,
+    fontWeight: '700',
+    textColor: '#111827'
+  });
 
-  Mission
-  Make fundamentals (spacing, hierarchy, clarity, accessibility) feel obvious — not optional.
-
-  Vision
-  Europe should be a serious player in design tools: privacy-minded, craft-led, community-built.
-
-  Get started
-  • V select • R rectangle • T text • Space pan • Scroll zoom
-  • Grid + Snap for clean spacing
-  • Share to collect feedback`,
+  const subtitle = mkEl('text', 128, 176, 656, 44);
+  Object.assign(subtitle, {
+    name: 'Subtitle',
+    text: 'A beginner-first UX canvas made in Europe — built to teach good design habits while you create.',
     fontSize: 16,
     lineHeight: 24,
     fontWeight: '500',
-    textColor: '#e9e9f2'
+    textColor: '#374151'
   });
+
+  const mission = mkEl('text', 128, 232, 320, 120);
+  Object.assign(mission, {
+    name: 'Mission',
+    text: '🎯 Mission\nMake UX fundamentals (spacing, hierarchy, clarity, accessibility) feel obvious — not optional.',
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '500',
+    textColor: '#111827'
+  });
+
+  const vision = mkEl('text', 464, 232, 320, 120);
+  Object.assign(vision, {
+    name: 'Vision',
+    text: '🌍 Vision\nHelp Europe become a serious player in design tools — privacy-minded, craft-led, community-built.',
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '500',
+    textColor: '#111827'
+  });
+
+  const tips = mkEl('text', 128, 320, 656, 110);
+  Object.assign(tips, {
+    name: 'Quick Tips',
+    text: '✨ Quick start\n• V Select  • R Rectangle  • T Text  • Space Pan  • Scroll Zoom\n• Turn on Grid + Snap for clean spacing\n• Share your file to get feedback from other designers',
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '500',
+    textColor: '#4B5563'
+  });
+
+  // Optional: subtle border
+  card.stroke = '#E5E7EB';
+  card.strokeWidth = 1;
 
   
 
