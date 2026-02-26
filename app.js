@@ -1807,8 +1807,11 @@ function updatePages() {
     item.appendChild(dot); item.appendChild(nameSpan);
     // Click = switch page
     item.addEventListener('click', ev=>{
-      if(ev.target.tagName==='INPUT') return;
-      S.page=p.id; S.selIds=[]; updatePages(); renderAll(); updateProps();
+      if (ev.target.tagName === 'INPUT') return;
+      if (ev.detail > 1) return;          // don't rerender on double-click
+      if (p.id === S.page) return;         // clicking active page does nothing
+      S.page = p.id; S.selIds = [];
+      updatePages(); renderAll(); updateProps();
     });
     // Double-click name = rename inline
     nameSpan.addEventListener('dblclick', ev=>{
