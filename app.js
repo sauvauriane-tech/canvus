@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════
 const S = {
   els: [], comments: [],
-  pages: [{id:1,name:'Page 1'},{id:2,name:'Page 2'}],
+  pages: [{id:1,name:'WELCOME TO CANVUS'},{id:2,name:'Page 2'}],
   page: 1,
   nextId: 1,
   selIds: [],
@@ -1965,29 +1965,31 @@ window.addEventListener('resize',()=>renderGrid());
   updatePages();
 
   // Seed a starter design
-  const card = mkEl('rect', 64, 64, 320, 200);
-  card.fills=[mkFill('#ffffff')]; card.rx=16; card.name='Card';
+  const welcome = mkEl('text', 80, 80, 640, 320);
+  Object.assign(welcome, {
+    name: 'Welcome Card',
+    text:
+  `Welcome to Canvus
 
-  const img = mkEl('rect', 80, 80, 136, 136);
-  img.fills=[mkFill('#7c6aee')]; img.rx=10; img.name='Image Placeholder';
+  A beginner-first UX canvas made in Europe — built to teach good UX habits while you design.
 
-  const h1 = mkEl('text', 232, 84, 136, 40);
-  Object.assign(h1, {text:'Card Heading', fontSize:18, lineHeight:24, fontWeight:'600', textColor:'#1a1a2e', name:'Heading', fills:[]});
+  Mission
+  Make fundamentals (spacing, hierarchy, clarity, accessibility) feel obvious — not optional.
 
-  const body = mkEl('text', 232, 116, 136, 48);
-  Object.assign(body, {text:'Short description of this card component.', fontSize:12, lineHeight:18, textColor:'#66668a', name:'Body Copy', fills:[]});
+  Vision
+  Europe should be a serious player in design tools: privacy-minded, craft-led, community-built.
 
-  const btn = mkEl('rect', 232, 180, 120, 44);
-  btn.fills=[mkFill('#7c6aee')]; btn.rx=8; btn.name='CTA Button';
+  Get started
+  • V select • R rectangle • T text • Space pan • Scroll zoom
+  • Grid + Snap for clean spacing
+  • Share to collect feedback`,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '500',
+    textColor: '#e9e9f2'
+  });
 
-  const btnLbl = mkEl('text', 250, 192, 84, 20);
-  Object.assign(btnLbl, {text:'Get Started', fontSize:14, lineHeight:20, fontWeight:'500', textColor:'#ffffff', name:'Button Label', fills:[]});
-
-  const circle = mkEl('ellipse', 200, 360, 80, 80);
-  circle.fills=[mkFill('#3db87a')]; circle.name='Accent Circle';
-
-  const divider = mkEl('line', 64, 300, 280, 0);
-  divider.fills=[mkFill('#ccccdd')]; divider.strokeWidth=1; divider.name='Divider';
+  
 
   renderAll();
   updateProps();
