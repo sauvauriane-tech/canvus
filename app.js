@@ -1964,111 +1964,121 @@ window.addEventListener('resize',()=>renderGrid());
   applyTransform();
   updatePages();
 
-  // Seed a starter design
- // --- Seed: Welcome card only ---
-  const card = mkEl('rect', 96, 96, 720, 360);
-  card.name = 'Welcome Card';
-  card.rx = 20;
-  card.fills = [mkFill('#ffffff', 1)];
+ // --- Seed: Welcome demo (replace the whole old “Seed a starter design” block with this) ---
 
-  const title1 = mkEl('text', 128, 128, 260, 44);
-  Object.assign(title1, {
-    name: 'Title Intro',
-    text: '🚀 Welcome to',
-    fontSize: 30,
-    lineHeight: 38,
-    fontWeight: '700',
-    textColor: '#111827'
-  });
+// Big white card
+const card = mkEl('rect', 96, 96, 920, 520);
+card.name = 'Welcome Card';
+card.rx = 24;
+card.fills = [mkFill('#ffffff')];
+card.stroke = '#E5E7EB';
+card.strokeWidth = 1;
 
-  const title2 = mkEl('text', 360, 128, 260, 44);
-  Object.assign(title2, {
-    name: 'Title Brand',
-    text: 'Canvus',
-    fontSize: 30,
-    lineHeight: 38,
-    fontWeight: '800',
-    textColor: '#7c6aee' // accent color
-  });
-
-  const subtitle = mkEl('text', 128, 176, 656, 44);
-  Object.assign(subtitle, {
-    name: 'Subtitle',
-    text: 'A beginner-first UX canvas made in Europe — built to teach good design habits while you create.',
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '500',
-    textColor: '#374151'
-  });
-
-  const mission = mkEl('text', 128, 232, 320, 120);
-  Object.assign(mission, {
-    name: 'Mission',
-    text: '🎯 Mission\nMake UX fundamentals (spacing, hierarchy, clarity, accessibility) feel obvious — not optional.',
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: '500',
-    textColor: '#111827'
-  });
-
-  const vision = mkEl('text', 464, 232, 320, 120);
-  Object.assign(vision, {
-    name: 'Vision',
-    text: '🌍 Vision\nHelp Europe become a serious player in design tools — privacy-minded, craft-led, community-built.',
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: '500',
-    textColor: '#111827'
-  });
-
-  const tips = mkEl('text', 128, 320, 656, 110);
-  Object.assign(tips, {
-    name: 'Quick Tips',
-    text: '✨ Quick start\n• V Select  • R Rectangle  • T Text  • Space Pan  • Scroll Zoom\n• Turn on Grid + Snap for clean spacing\n• Share your file to get feedback from other designers',
-    fontSize: 13,
-    lineHeight: 20,
-    fontWeight: '500',
-    textColor: '#4B5563'
-  });
-
-  // Optional: subtle border
-  card.stroke = '#E5E7EB';
-  card.strokeWidth = 1;
-
-  Object.assign(mission, {
-  name: 'Mission',
-  text: '🎯  MISSION\nTurn UX principles into muscle memory — spacing, hierarchy, clarity, and accessibility by default.',
-  fontSize: 16,
-  lineHeight: 24,
-  fontWeight: '700',
+// Title (split so Canvus can be accent colored)
+const title1 = mkEl('text', 128, 132, 360, 52);
+Object.assign(title1, {
+  name: 'Title Intro',
+  text: '🚀 Welcome to',
+  fontSize: 40,
+  lineHeight: 48,
+  fontWeight: '800',
   textColor: '#111827'
 });
 
-Object.assign(vision, {
-  name: 'Vision',
-  text: '🌍  VISION\nBuild a European design tool ecosystem: privacy-minded, craft-led, and community-powered.',
-  fontSize: 16,
-  lineHeight: 24,
-  fontWeight: '700',
+const title2 = mkEl('text', 430, 132, 360, 52);
+Object.assign(title2, {
+  name: 'Title Brand',
+  text: 'Canvus',
+  fontSize: 40,
+  lineHeight: 48,
+  fontWeight: '900',
+  textColor: '#7c6aee' // accent
+});
+
+// Subtitle
+const subtitle = mkEl('text', 128, 192, 840, 40);
+Object.assign(subtitle, {
+  name: 'Subtitle',
+  text: 'A beginner-first UX canvas made in Europe — built to teach good design habits while you create.',
+  fontSize: 18,
+  lineHeight: 28,
+  fontWeight: '600',
+  textColor: '#374151'
+});
+
+// Mission title + body (separate elements for hierarchy)
+const mTitle = mkEl('text', 128, 260, 360, 32);
+Object.assign(mTitle, {
+  name: 'Mission Title',
+  text: '🎯  MISSION',
+  fontSize: 22,
+  lineHeight: 28,
+  fontWeight: '900',
   textColor: '#111827'
 });
 
-Object.assign(tips, {
-  name: 'Quick Tips',
+const mBody = mkEl('text', 128, 296, 400, 120);
+Object.assign(mBody, {
+  name: 'Mission Body',
+  text: 'Turn UX principles into muscle memory — spacing, hierarchy, clarity, and accessibility by default.',
+  fontSize: 18,
+  lineHeight: 28,
+  fontWeight: '650',
+  textColor: '#111827'
+});
+
+// Vision title + body
+const vTitle = mkEl('text', 560, 260, 360, 32);
+Object.assign(vTitle, {
+  name: 'Vision Title',
+  text: '🌍  VISION',
+  fontSize: 22,
+  lineHeight: 28,
+  fontWeight: '900',
+  textColor: '#111827'
+});
+
+const vBody = mkEl('text', 560, 296, 400, 120);
+Object.assign(vBody, {
+  name: 'Vision Body',
+  text: 'Build a European design tool ecosystem: privacy-minded, craft-led, and community-powered.',
+  fontSize: 18,
+  lineHeight: 28,
+  fontWeight: '650',
+  textColor: '#111827'
+});
+
+// Quick start block (purple)
+const qsBg = mkEl('rect', 128, 392, 840, 188);
+qsBg.name = 'Quick Start Block';
+qsBg.rx = 20;
+qsBg.fills = [mkFill('#7c6aee')];
+
+const qsTitle = mkEl('text', 160, 420, 780, 32);
+Object.assign(qsTitle, {
+  name: 'Quick Start Title',
+  text: '✨  QUICK START',
+  fontSize: 22,
+  lineHeight: 28,
+  fontWeight: '900',
+  textColor: '#ffffff'
+});
+
+const qsBody = mkEl('text', 160, 460, 780, 120);
+Object.assign(qsBody, {
+  name: 'Quick Start Body',
   text:
-`✨  QUICK START
-V  Select
+`V  Select
 R  Rectangle
 T  Text
 Space  Pan
 Scroll  Zoom
 
-• Turn on Grid + Snap for clean spacing
-• Share your file to get feedback from other designers`,
-  fontSize: 14,
-  lineHeight: 22,
-  fontWeight: '700',
-  textColor: '#374151'
+Grid + Snap = clean spacing • Share to get feedback`,
+  fontSize: 16,
+  lineHeight: 24,
+  fontWeight: '650',
+  textColor: '#ffffff'
 });
 
   renderAll();
