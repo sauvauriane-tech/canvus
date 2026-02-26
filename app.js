@@ -1967,7 +1967,7 @@ window.addEventListener('resize',()=>renderGrid());
  // --- Seed: Welcome demo (replace the whole old “Seed a starter design” block with this) ---
 
 // Big white card
-const card = mkEl('rect', 96, 96, 920, 640);
+const card = mkEl('rect', 96, 96, 920, 580);
 card.name = 'Welcome Card';
 card.rx = 24;
 card.fills = [mkFill('#ffffff')];
@@ -2049,7 +2049,7 @@ Object.assign(vBody, {
 });
 
 // Quick start block (purple)
-const qsBg = mkEl('rect', 128, 420, 840, 240);
+const qsBg = mkEl('rect', 128, 400, 840, 260);
 qsBg.name = 'Quick Start Block';
 qsBg.rx = 20;
 qsBg.fills = [mkFill('#7c6aee')];
