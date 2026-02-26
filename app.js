@@ -1971,14 +1971,24 @@ window.addEventListener('resize',()=>renderGrid());
   card.rx = 20;
   card.fills = [mkFill('#ffffff', 1)];
 
-  const title = mkEl('text', 128, 128, 656, 44);
-  Object.assign(title, {
-    name: 'Title',
-    text: '🚀 Welcome to Canvus',
+  const title1 = mkEl('text', 128, 128, 260, 44);
+  Object.assign(title1, {
+    name: 'Title Intro',
+    text: '🚀 Welcome to',
     fontSize: 30,
     lineHeight: 38,
     fontWeight: '700',
     textColor: '#111827'
+  });
+
+  const title2 = mkEl('text', 360, 128, 260, 44);
+  Object.assign(title2, {
+    name: 'Title Brand',
+    text: 'Canvus',
+    fontSize: 30,
+    lineHeight: 38,
+    fontWeight: '800',
+    textColor: '#7c6aee' // accent color
   });
 
   const subtitle = mkEl('text', 128, 176, 656, 44);
@@ -2025,7 +2035,41 @@ window.addEventListener('resize',()=>renderGrid());
   card.stroke = '#E5E7EB';
   card.strokeWidth = 1;
 
-  
+  Object.assign(mission, {
+  name: 'Mission',
+  text: '🎯  MISSION\nTurn UX principles into muscle memory — spacing, hierarchy, clarity, and accessibility by default.',
+  fontSize: 16,
+  lineHeight: 24,
+  fontWeight: '700',
+  textColor: '#111827'
+});
+
+Object.assign(vision, {
+  name: 'Vision',
+  text: '🌍  VISION\nBuild a European design tool ecosystem: privacy-minded, craft-led, and community-powered.',
+  fontSize: 16,
+  lineHeight: 24,
+  fontWeight: '700',
+  textColor: '#111827'
+});
+
+Object.assign(tips, {
+  name: 'Quick Tips',
+  text:
+`✨  QUICK START
+V  Select
+R  Rectangle
+T  Text
+Space  Pan
+Scroll  Zoom
+
+• Turn on Grid + Snap for clean spacing
+• Share your file to get feedback from other designers`,
+  fontSize: 14,
+  lineHeight: 22,
+  fontWeight: '700',
+  textColor: '#374151'
+});
 
   renderAll();
   updateProps();
