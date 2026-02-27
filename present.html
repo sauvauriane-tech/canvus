@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canvus — Present</title>
+<style>
+/* ── Reset ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0e0e12;--surface:#16161e;--surface2:#1e1e28;--border:#2a2a38;
+  --text:#e8e8f0;--text2:#aaa;--text3:#666;
+  --accent:#7c6aee;--accent-soft:rgba(124,106,238,.12);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;}
+
+/* ── Layout ── */
+#shell{display:flex;width:100%;height:100%;flex-direction:column;}
+#topbar{
+  height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  flex-shrink:0;z-index:10;
+}
+#body{display:flex;flex:1;overflow:hidden;}
+
+/* ── Left flows panel ── */
+#flows-panel{
+  width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:width .2s;
+}
+#flows-panel.hidden{width:0;border-right:none;}
+#flows-panel-hdr{
+  padding:10px 12px 8px;font-size:11px;font-weight:600;color:var(--text3);
+  letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;
+  border-bottom:1px solid var(--border);
+}
+#flows-list{flex:1;overflow-y:auto;padding:6px 0;}
+.flow-item{
+  display:flex;align-items:center;gap:8px;padding:7px 12px;
+  cursor:pointer;transition:background .1s;font-size:12px;color:var(--text2);
+  border-radius:0;
+}
+.flow-item:hover{background:var(--surface2);color:var(--text);}
+.flow-item.on{background:var(--accent-soft);color:var(--accent);}
+.flow-icon{
+  width:28px;height:20px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;color:var(--text3);
+}
+.flow-item.on .flow-icon{border-color:var(--accent);background:var(--accent-soft);}
+
+/* ── Stage ── */
+#stage{
+  flex:1;position:relative;overflow:hidden;
+  background:var(--bg);display:flex;align-items:center;justify-content:center;
+}
+#stage-frame{
+  position:relative;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06),0 20px 80px rgba(0,0,0,.6);
+}
+#stage-canvas{
+  position:absolute;inset:0;transform-origin:top left;
+}
+
+/* ── Topbar controls ── */
+.logo-small{
+  display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
+  color:var(--accent);letter-spacing:-.2px;margin-right:4px;
+}
+.logo-mark-sm{
+  width:18px;height:18px;background:var(--accent);border-radius:5px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.tb-sep{width:1px;height:18px;background:var(--border);margin:0 4px;flex-shrink:0;}
+#file-title{font-size:12px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.spacer{flex:1;}
+.tb-btn{
+  height:28px;padding:0 10px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text2);border-radius:6px;
+  font-size:11px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:5px;
+  transition:all .12s;white-space:nowrap;
+}
+.tb-btn:hover{border-color:var(--accent);color:var(--text);}
+.tb-btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+.tb-btn svg{flex-shrink:0;}
+
+/* Scale select */
+#scale-select{
+  height:28px;padding:0 24px 0 8px;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);border-radius:6px;font-size:11px;font-weight:500;
+  cursor:pointer;outline:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%23aaa' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 6px center;
+}
+#scale-select:hover{border-color:var(--accent);}
+
+/* Nav arrows */
+#nav-prev,#nav-next{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:40px;height:40px;border-radius:50%;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .15s;z-index:5;
+  opacity:0;
+}
+#stage:hover #nav-prev,#stage:hover #nav-next{opacity:1;}
+#nav-prev:hover,#nav-next:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.25);}
+#nav-prev{left:16px;}
+#nav-next{right:16px;}
+#nav-prev.hidden,#nav-next.hidden{display:none;}
+
+/* Hotspot overlays */
+.hotspot{
+  position:absolute;cursor:pointer;
+  background:rgba(124,106,238,.08);
+  border:1.5px solid transparent;
+  border-radius:4px;
+  transition:background .12s,border-color .12s;
+}
+.hotspot:hover{background:rgba(124,106,238,.2);border-color:rgba(124,106,238,.5);}
+
+/* Loading / empty state */
+#empty-state{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;
+  color:var(--text3);font-size:13px;
+}
+#empty-state svg{opacity:.4;}
+
+/* Notification toast */
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:rgba(30,30,40,.96);border:1px solid var(--border);
+  border-radius:8px;padding:8px 16px;font-size:12px;color:var(--text2);
+  opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:100;
+  backdrop-filter:blur(8px);
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* Transition animations */
+@keyframes fade-in{from{opacity:0;}to{opacity:1;}}
+@keyframes slide-left{from{transform:translateX(40px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes slide-right{from{transform:translateX(-40px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes slide-up{from{transform:translateY(30px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+@keyframes slide-down{from{transform:translateY(-30px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.anim-dissolve{animation:fade-in .3s ease;}
+.anim-slide-left{animation:slide-left .28s ease;}
+.anim-slide-right{animation:slide-right .28s ease;}
+.anim-slide-up{animation:slide-up .28s ease;}
+.anim-slide-down{animation:slide-down .28s ease;}
+.anim-instant{}
+</style>
+</head>
+<body>
+<div id="shell">
+  <!-- Topbar -->
+  <div id="topbar">
+    <div class="logo-small">
+      <div class="logo-mark-sm">
+        <svg viewBox="0 0 12 12" fill="none" style="width:11px;height:11px;">
+          <rect x="1" y="1" width="4" height="4" rx="1" fill="white"/>
+          <rect x="7" y="1" width="4" height="4" rx="1" fill="white" opacity=".6"/>
+          <rect x="1" y="7" width="4" height="4" rx="1" fill="white" opacity=".6"/>
+          <rect x="7" y="7" width="4" height="4" rx="1" fill="white"/>
+        </svg>
+      </div>
+      Canvus
+    </div>
+    <div class="tb-sep"></div>
+    <span id="file-title">—</span>
+    <div class="spacer"></div>
+
+    <!-- Scale -->
+    <select id="scale-select" onchange="onScaleChange(this.value)">
+      <option value="fit">Fit</option>
+      <option value="fill">Fill screen</option>
+      <option value="actual">Actual size (100%)</option>
+      <option value="fit-width">Fit width</option>
+      <option value="responsive">Responsive</option>
+    </select>
+
+    <div class="tb-sep"></div>
+
+    <!-- Toggle flows panel -->
+    <button class="tb-btn on" id="btn-flows" onclick="toggleFlowsPanel()" title="Toggle flows panel (F)">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <rect x="1" y="1" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/>
+        <rect x="6" y="1" width="5" height="4" rx="1" fill="currentColor"/>
+        <rect x="6" y="7" width="5" height="4" rx="1" fill="currentColor" opacity=".5"/>
+      </svg>
+      Flows
+    </button>
+
+    <!-- Restart -->
+    <button class="tb-btn" onclick="restartFlow()" title="Restart from beginning (R)">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M2 6a4 4 0 104.5-3.95" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <path d="M6.5 1.5L4.5 2.5l2 1" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Restart
+    </button>
+
+    <!-- Hide UI -->
+    <button class="tb-btn" id="btn-hide-ui" onclick="toggleUI()" title="Hide UI (H)">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M1 6s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4z" stroke="currentColor" stroke-width="1.1"/>
+        <circle cx="6" cy="6" r="1.5" fill="currentColor"/>
+      </svg>
+      Hide UI
+    </button>
+  </div>
+
+  <!-- Body -->
+  <div id="body">
+    <!-- Flows panel -->
+    <div id="flows-panel">
+      <div id="flows-panel-hdr">Flows</div>
+      <div id="flows-list"></div>
+    </div>
+
+    <!-- Stage -->
+    <div id="stage">
+      <div id="empty-state">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect x="8" y="12" width="32" height="24" rx="4" stroke="#666" stroke-width="1.5"/>
+          <path d="M18 22l4 4 8-8" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>No flows found in this file.</div>
+        <div style="font-size:11px;">Mark a frame as a flow starting point in Prototype mode.</div>
+      </div>
+      <!-- Stage frame (clip box) -->
+      <div id="stage-frame">
+        <div id="stage-canvas"></div>
+      </div>
+      <!-- Navigation arrows -->
+      <div id="nav-prev" onclick="navigatePrev()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L5 7l4 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div id="nav-next" onclick="navigateNext()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 2l4 5-4 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ── State ──
+const P = {
+  file: null,
+  flows: [],        // [{frame, reachable:[frameId,...]}]
+  flowIdx: 0,       // which flow is active
+  history: [],      // [{frameId, animClass}] navigation stack
+  histIdx: -1,      // current position in history
+  scaleMode: 'fit',
+  uiVisible: true,
+  flowsPanelOpen: true,
+};
+
+// ── FS shim (reads from localStorage, same as app.js) ──
+const FS = {
+  load() {
+    try { return JSON.parse(localStorage.getItem('canvus_files')||'[]'); } catch{ return []; }
+  }
+};
+
+// ── Init ──
+function init() {
+  const params = new URLSearchParams(location.search);
+  const fileId = params.get('fileId');
+  if (!fileId) { showEmpty('No file ID in URL.'); return; }
+
+  const files = FS.load();
+  const file = files.find(f=>f.id===fileId);
+  if (!file) { showEmpty('File not found. Try opening from the editor again.'); return; }
+
+  P.file = file;
+  document.getElementById('file-title').textContent = file.name || 'Untitled';
+  document.title = (file.name||'Untitled') + ' — Canvus Present';
+
+  buildFlows();
+  renderFlowsList();
+
+  if (P.flows.length) {
+    selectFlow(0);
+  } else {
+    showEmpty('No flows found. Mark a frame as a starting point in Prototype mode.');
+  }
+}
+
+// ── Build flows from data ──
+function buildFlows() {
+  const els = P.file.els || [];
+  // Find flow-start frames
+  const starters = els.filter(e => e.isFlowStart && e.type === 'frame' && !e.deleted);
+
+  P.flows = starters.map(starter => {
+    // BFS to find all reachable frames from this flow start
+    const visited = new Set();
+    const queue = [starter.id];
+    while (queue.length) {
+      const id = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const el = els.find(e=>e.id===id);
+      if (!el || !el.interactions) continue;
+      el.interactions.forEach(ix => {
+        if (ix.action==='navigate' && ix.target && !visited.has(ix.target)) {
+          queue.push(ix.target);
+        }
+      });
+    }
+    return { frame: starter, reachable: [...visited] };
+  });
+
+  // If no starters but there are frames, treat first frame as a flow
+  if (!P.flows.length) {
+    const frames = els.filter(e=>e.type==='frame'&&!e.deleted&&(e.page===undefined||e.page===(P.file.pages&&P.file.pages[0]&&P.file.pages[0].id)));
+    if (frames.length) {
+      P.flows = [{ frame: frames[0], reachable: [frames[0].id] }];
+    }
+  }
+}
+
+// ── Flows list sidebar ──
+function renderFlowsList() {
+  const list = document.getElementById('flows-list');
+  if (!P.flows.length) {
+    list.innerHTML = '<div style="padding:16px 12px;font-size:12px;color:#555;text-align:center;">No flows</div>';
+    return;
+  }
+  list.innerHTML = P.flows.map((f,i) => {
+    const fr = f.frame;
+    const bg = getFramePreviewColor(fr);
+    return `<div class="flow-item ${i===P.flowIdx?'on':''}" onclick="selectFlow(${i})">
+      <div class="flow-icon" style="background:${bg};">${i+1}</div>
+      <span>${fr.flowName||(fr.name||('Flow '+(i+1)))}</span>
+    </div>`;
+  }).join('');
+}
+
+function getFramePreviewColor(fr) {
+  const fills = fr.fills||[];
+  const vis = fills.filter(f=>f.visible);
+  if (vis.length && vis[0].type==='solid') return vis[0].color||'#1e1e28';
+  return '#1e1e28';
+}
+
+// ── Select + navigate ──
+function selectFlow(idx) {
+  P.flowIdx = idx;
+  P.history = [{ frameId: P.flows[idx].frame.id, animClass: '' }];
+  P.histIdx = 0;
+  renderFlowsList();
+  showFrame(P.flows[idx].frame.id, '');
+}
+
+function showFrame(frameId, animClass) {
+  const els = P.file.els || [];
+  const frame = els.find(e=>e.id===frameId);
+  if (!frame) return;
+
+  const stageFrame = document.getElementById('stage-frame');
+  const stageCanvas = document.getElementById('stage-canvas');
+  document.getElementById('empty-state').style.display = 'none';
+  stageFrame.style.display = 'block';
+
+  // Resize stage-frame to match frame dimensions
+  stageFrame.style.width = frame.w + 'px';
+  stageFrame.style.height = frame.h + 'px';
+
+  applyScale(frame);
+
+  // Clear and render
+  stageCanvas.innerHTML = '';
+  stageCanvas.style.width = frame.w + 'px';
+  stageCanvas.style.height = frame.h + 'px';
+  stageCanvas.style.transformOrigin = 'top left';
+  stageCanvas.style.transform = 'scale(1)';
+
+  renderFrameInto(frame, stageCanvas, els);
+
+  // Apply transition animation
+  if (animClass) {
+    stageCanvas.classList.remove('anim-dissolve','anim-slide-left','anim-slide-right','anim-slide-up','anim-slide-down','anim-instant');
+    void stageCanvas.offsetWidth; // reflow
+    stageCanvas.classList.add('anim-'+animClass);
+  }
+
+  // Overlay hotspots for interactions
+  renderHotspots(frame, stageFrame, els);
+  updateNavArrows();
+}
+
+function applyScale(frame) {
+  const stage = document.getElementById('stage');
+  const stageFrame = document.getElementById('stage-frame');
+  const stageW = stage.clientWidth;
+  const stageH = stage.clientHeight;
+  const fw = frame.w || 1;
+  const fh = frame.h || 1;
+
+  let scale = 1;
+  if (P.scaleMode === 'fit') {
+    scale = Math.min((stageW - 40) / fw, (stageH - 40) / fh, 1);
+  } else if (P.scaleMode === 'fill') {
+    scale = Math.max(stageW / fw, stageH / fh);
+  } else if (P.scaleMode === 'actual') {
+    scale = 1;
+  } else if (P.scaleMode === 'fit-width') {
+    scale = (stageW - 40) / fw;
+  } else if (P.scaleMode === 'responsive') {
+    scale = stageW / fw;
+  }
+
+  stageFrame.style.transform = `scale(${scale})`;
+  stageFrame.style.transformOrigin = 'center center';
+}
+
+// ── Render a frame's children into a container ──
+function renderFrameInto(frame, container, els) {
+  // Background of frame itself
+  const bg = frameBackground(frame);
+  container.style.background = bg;
+  container.style.borderRadius = (frame.rx||0) + 'px';
+
+  // Children of this frame
+  const children = els.filter(e => e.parentId === frame.id && e.visible !== false);
+  children.forEach(child => renderChildEl(child, container, frame, els));
+}
+
+function frameBackground(fr) {
+  const fills = (fr.fills||[]).filter(f=>f.visible!==false);
+  if (!fills.length) return 'transparent';
+  const f = fills[fills.length-1];
+  if (f.type==='solid') return f.color||'#fff';
+  if (f.type==='linear') return `linear-gradient(${f.angle||0}deg, ${(f.stops||[]).map(s=>`${s.color} ${s.pos*100}%`).join(',')})`;
+  return f.color||'#fff';
+}
+
+function renderChildEl(el, container, frame, els) {
+  // Coordinates are absolute canvas; make them frame-relative
+  const left = el.x - (frame.x || 0);
+  const top = el.y - (frame.y || 0);
+
+  let dom;
+  if (el.type === 'frame') {
+    dom = document.createElement('div');
+    dom.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${el.w}px;height:${el.h}px;overflow:hidden;border-radius:${el.rx||0}px;background:${frameBackground(el)};`;
+    // Render sub-frame children
+    const subChildren = els.filter(c=>c.parentId===el.id&&c.visible!==false);
+    subChildren.forEach(c => renderChildEl(c, dom, el, els));
+  } else if (el.type === 'rect' || el.type === 'ellipse') {
+    dom = document.createElement('div');
+    const radius = el.type==='ellipse' ? '50%' : (el.rx||0)+'px';
+    const fills = (el.fills||[]).filter(f=>f.visible!==false);
+    const bg = fills.length ? (fills[fills.length-1].color||'transparent') : 'transparent';
+    const border = (el.stroke&&el.stroke!=='none') ? `border:${el.strokeWidth||1}px solid ${el.stroke};` : '';
+    dom.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${el.w}px;height:${el.h}px;background:${bg};border-radius:${radius};opacity:${(el.opacity||100)/100};${border}`;
+  } else if (el.type === 'text') {
+    dom = document.createElement('div');
+    const fills = (el.fills||[]).filter(f=>f.visible!==false);
+    const color = fills.length ? (fills[0].color||el.textColor||'#e8e8f0') : (el.textColor||'#e8e8f0');
+    dom.style.cssText = `position:absolute;left:${left}px;top:${top}px;min-width:${el.w}px;min-height:${el.h}px;color:${color};font-size:${el.fontSize||14}px;font-weight:${el.fontWeight||400};font-style:${el.fontStyle||'normal'};line-height:${el.lineHeight||1.4};white-space:pre-wrap;word-break:break-word;font-family:'DM Sans',sans-serif;opacity:${(el.opacity||100)/100};`;
+    dom.textContent = el.text || '';
+  } else if (el.type === 'image' || (el.type === 'rect' && el.imageSrc)) {
+    dom = document.createElement('div');
+    dom.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${el.w}px;height:${el.h}px;background-image:url('${el.imageSrc}');background-size:cover;background-position:center;border-radius:${el.rx||0}px;opacity:${(el.opacity||100)/100};`;
+  } else {
+    dom = document.createElement('div');
+    dom.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${el.w}px;height:${el.h}px;`;
+  }
+
+  if (el.flipH || el.flipV) {
+    dom.style.transform = `scale(${el.flipH?-1:1},${el.flipV?-1:1})`;
+    dom.style.transformOrigin = 'center center';
+  }
+
+  container.appendChild(dom);
+}
+
+// ── Hotspot overlays ──
+function renderHotspots(frame, stageFrame, els) {
+  // Remove old hotspots
+  stageFrame.querySelectorAll('.hotspot').forEach(h=>h.remove());
+
+  const children = els.filter(e=>e.parentId===frame.id&&e.visible!==false);
+  children.forEach(el => {
+    if (!el.interactions || !el.interactions.length) return;
+    el.interactions.forEach(ix => {
+      if (ix.action !== 'navigate') return;
+      const left = el.x - (frame.x||0);
+      const top = el.y - (frame.y||0);
+      const hs = document.createElement('div');
+      hs.className = 'hotspot';
+      hs.style.cssText = `left:${left}px;top:${top}px;width:${el.w}px;height:${el.h}px;`;
+      hs.title = ix.trigger + ' → ' + (els.find(e=>e.id===ix.target)?.name||'Frame');
+      hs.addEventListener('click', () => navigateTo(ix.target, ix.animation||'dissolve'));
+      stageFrame.appendChild(hs);
+    });
+  });
+}
+
+// ── Navigation ──
+function navigateTo(frameId, animName) {
+  const animClass = {
+    dissolve: 'dissolve',
+    'slide-left': 'slide-left',
+    'slide-right': 'slide-right',
+    'slide-up': 'slide-up',
+    'slide-down': 'slide-down',
+    instant: 'instant',
+    none: 'instant',
+  }[animName] || 'dissolve';
+
+  // Trim future history if we navigated back
+  P.history = P.history.slice(0, P.histIdx + 1);
+  P.history.push({ frameId, animClass });
+  P.histIdx = P.history.length - 1;
+  showFrame(frameId, animClass);
+}
+
+function navigatePrev() {
+  if (P.histIdx <= 0) return;
+  P.histIdx--;
+  const entry = P.history[P.histIdx];
+  showFrame(entry.frameId, 'slide-right');
+}
+
+function navigateNext() {
+  if (P.histIdx >= P.history.length - 1) return;
+  P.histIdx++;
+  const entry = P.history[P.histIdx];
+  showFrame(entry.frameId, 'slide-left');
+}
+
+function updateNavArrows() {
+  document.getElementById('nav-prev').classList.toggle('hidden', P.histIdx <= 0);
+  document.getElementById('nav-next').classList.toggle('hidden', P.histIdx >= P.history.length - 1);
+}
+
+function restartFlow() {
+  if (!P.flows.length) return;
+  selectFlow(P.flowIdx);
+  toast('Restarted');
+}
+
+// ── Scale ──
+function onScaleChange(val) {
+  P.scaleMode = val;
+  const entry = P.history[P.histIdx];
+  if (entry) {
+    const frame = (P.file.els||[]).find(e=>e.id===entry.frameId);
+    if (frame) applyScale(frame);
+  }
+}
+
+// ── Toggle panels ──
+function toggleFlowsPanel() {
+  P.flowsPanelOpen = !P.flowsPanelOpen;
+  document.getElementById('flows-panel').classList.toggle('hidden', !P.flowsPanelOpen);
+  document.getElementById('btn-flows').classList.toggle('on', P.flowsPanelOpen);
+}
+
+function toggleUI() {
+  P.uiVisible = !P.uiVisible;
+  const topbar = document.getElementById('topbar');
+  const flowsPanel = document.getElementById('flows-panel');
+  topbar.style.display = P.uiVisible ? '' : 'none';
+  flowsPanel.style.display = (P.uiVisible && P.flowsPanelOpen) ? '' : 'none';
+  document.getElementById('btn-hide-ui').classList.toggle('on', !P.uiVisible);
+}
+
+// ── Empty state ──
+function showEmpty(msg) {
+  const em = document.getElementById('empty-state');
+  em.style.display = 'flex';
+  em.querySelector('div:last-child').textContent = msg;
+  document.getElementById('stage-frame').style.display = 'none';
+}
+
+// ── Toast ──
+let _toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(()=>el.classList.remove('show'), 2000);
+}
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', ev => {
+  const k = ev.key.toLowerCase();
+  if (k === 'f') toggleFlowsPanel();
+  if (k === 'h') toggleUI();
+  if (k === 'r') restartFlow();
+  if (k === 'arrowleft') { ev.preventDefault(); navigatePrev(); }
+  if (k === 'arrowright') { ev.preventDefault(); navigateNext(); }
+  if (k === 'escape') window.close();
+});
+
+// ── Resize handler ──
+window.addEventListener('resize', () => {
+  const entry = P.history[P.histIdx];
+  if (entry) {
+    const frame = (P.file.els||[]).find(e=>e.id===entry.frameId);
+    if (frame) applyScale(frame);
+  }
+});
+
+// ── Start ──
+init();
+</script>
+</body>
+</html>

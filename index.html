@@ -10,9 +10,46 @@
 </head>
 <body>
 
+<!-- ══════════════ WORKSPACE DASHBOARD ══════════════ -->
+<div id="workspace">
+  <div id="ws-sidebar">
+    <div id="ws-logo-area">
+      <div class="logo-mark" style="width:22px;height:22px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg viewBox="0 0 12 12" fill="none" style="width:13px;height:13px;"><rect x="1" y="1" width="4" height="4" rx="1" fill="white"/><rect x="7" y="1" width="4" height="4" rx="1" fill="white" opacity=".6"/><rect x="1" y="7" width="4" height="4" rx="1" fill="white" opacity=".6"/><rect x="7" y="7" width="4" height="4" rx="1" fill="white"/></svg>
+      </div>
+      <span style="font-weight:700;font-size:13px;color:var(--accent);letter-spacing:-.3px;">Canvus</span>
+    </div>
+    <button id="ws-new-btn" onclick="wsNewFile()">+ New File</button>
+    <div class="ws-nav">
+      <div class="ws-nav-item on" data-section="recent" onclick="wsSection('recent')">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 4v2.5L8 7.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Recent
+      </div>
+      <div class="ws-nav-item" data-section="drafts" onclick="wsSection('drafts')">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="2" y="2" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 5.5h4M4.5 7.5h2.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+        Drafts
+      </div>
+      <div class="ws-nav-sep"></div>
+      <div class="ws-nav-item ws-nav-trash" data-section="trash" onclick="wsSection('trash')">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3.5h9M4.5 3.5V2.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5v1M5 6v3M8 6v3M3 3.5l.5 6.5a.5.5 0 00.5.5h5a.5.5 0 00.5-.5l.5-6.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Trash
+      </div>
+    </div>
+  </div>
+  <div id="ws-main">
+    <div id="ws-topbar">
+      <h2 id="ws-section-title">Recent</h2>
+      <button class="btn btn-ghost" onclick="closeWorkspace()" style="font-size:11px;">← Back to Editor</button>
+    </div>
+    <div id="ws-grid"></div>
+  </div>
+</div>
+<!-- Context menu for workspace file cards -->
+<div id="ws-ctx"></div>
+
 <!-- ══════════════ TOPBAR — file info + mode switch ══════════════ -->
 <div id="topbar">
-  <div class="logo">
+  <div class="logo" onclick="openWorkspace()" style="cursor:pointer;" title="Open Workspace">
     <div class="logo-mark">
       <svg viewBox="0 0 12 12" fill="none">
         <rect x="1" y="1" width="4" height="4" rx="1" fill="white"/>
@@ -26,25 +63,21 @@
   <div class="tb-sep"></div>
   <input id="file-name" value="Untitled File" spellcheck="false">
   <div class="spacer"></div>
-
-  <!-- Mode tabs -->
-  <div id="mode-tabs">
-    <button class="mode-tab on" id="mode-design" onclick="switchMode('design')">Design</button>
-    <button class="mode-tab" id="mode-proto" onclick="switchMode('proto')">Prototype</button>
-    <button class="mode-tab" id="mode-comment" onclick="switchMode('comment')">Comment</button>
-  </div>
-
-  <div class="spacer"></div>
   <div id="score-badge" onclick="openCoach()">
     <span id="score-lbl">UX</span>
     <span id="score-val">—</span>
   </div>
   <div class="tb-sep"></div>
+  <label class="btn btn-ghost" style="cursor:pointer;" title="Import Figma JSON (.json) or drop on canvas">
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><path d="M5.5 1v6M2.5 5L5.5 8 8.5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+    Import
+    <input type="file" id="import-file-input" accept=".json,.fig" style="display:none" onchange="importFigmaFile(event)">
+  </label>
   <button class="btn btn-ghost" onclick="openShare()">
     <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><circle cx="9" cy="2" r="1.5" stroke="currentColor" stroke-width="1.1"/><circle cx="9" cy="9" r="1.5" stroke="currentColor" stroke-width="1.1"/><circle cx="2" cy="5.5" r="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M7.5 2.7L3.5 4.8M3.5 6.2l4 2.1" stroke="currentColor" stroke-width="1.1"/></svg>
     Share
   </button>
-  <button class="btn btn-primary">Present</button>
+  <button class="btn btn-primary" onclick="openPresent()">Present</button>
 </div>
 
 <!-- ══════════════ SHARE MODAL ══════════════ -->
@@ -82,6 +115,7 @@
     <div class="panel-tabs">
       <div class="ptab on" data-tab="layers" onclick="switchLeftTab('layers')">Layers</div>
       <div class="ptab" data-tab="kit" onclick="switchLeftTab('kit')">Kit</div>
+      <div class="ptab" data-tab="components" onclick="switchLeftTab('components')">Components</div>
       <div class="ptab" data-tab="colors" onclick="switchLeftTab('colors')">Colors</div>
     </div>
 
@@ -107,6 +141,11 @@
       <div class="kit-row" draggable="true" data-kit="navbar"><div class="kit-thumb" style="background:#fff;border-bottom:1px solid #ddd;border-radius:3px 3px 0 0;"></div>Navbar</div>
       <div class="kit-row" draggable="true" data-kit="modal"><div class="kit-thumb" style="background:#fff;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,.3);"></div>Modal</div>
       <div class="kit-row" draggable="true" data-kit="dashboard"><div class="kit-thumb" style="background:#f0f0f5;border-radius:3px;display:flex;"><div style="width:7px;background:#ddd;height:100%;border-radius:3px 0 0 3px;"></div></div>Dashboard</div>
+    </div>
+
+    <!-- Components -->
+    <div id="tab-components" class="panel-body" style="display:none;flex:1;overflow-y:auto;">
+      <div id="components-list"></div>
     </div>
 
     <!-- Colors -->
@@ -148,11 +187,48 @@
         </div>
       </div>
       <div id="proto-content" style="display:none;">
-        <div class="psec">
-          <div class="psec-title">Interactions</div>
-          <p style="font-size:10px;color:var(--text3);margin-bottom:8px;">Toggle Prototype mode, click an element then click a target to connect them.</p>
-          <div id="proto-connections-list"></div>
-          <div id="proto-empty" style="font-size:10px;color:var(--text3);text-align:center;padding:8px 0;">No connections yet</div>
+        <!-- Empty state -->
+        <div id="proto-no-sel" class="psec" style="text-align:center;padding:28px 16px;">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style="opacity:.18;margin:0 auto 10px;display:block;">
+            <circle cx="14" cy="14" r="10" stroke="#9090a8" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <line x1="14" y1="5" x2="14" y2="23" stroke="#9090a8" stroke-width="1.2"/>
+            <line x1="5" y1="14" x2="23" y2="14" stroke="#9090a8" stroke-width="1.2"/>
+          </svg>
+          <div style="font-size:11px;color:var(--text3);line-height:1.6;">Select a frame or an<br>element inside a frame</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:8px;opacity:.6;">Hover to reveal the blue handle,<br>then drag to connect frames</div>
+        </div>
+        <!-- Selection content (prototypable element selected) -->
+        <div id="proto-sel-content" style="display:none;">
+          <!-- Flow starting point (frames only) -->
+          <div class="psec" id="proto-flow-sec" style="display:none;">
+            <div class="proto-row-hdr">
+              <span class="proto-row-label">Flow starting point</span>
+              <button class="proto-row-add" id="proto-flow-btn" onclick="toggleFlowStart()" title="Set/remove flow starting point">+</button>
+            </div>
+            <div id="proto-flow-badge" class="proto-flow-badge-row" style="display:none;"></div>
+          </div>
+          <!-- Interactions -->
+          <div class="psec">
+            <div class="proto-row-hdr">
+              <span class="proto-row-label">Interactions</span>
+              <button class="proto-row-add" onclick="addInteraction()" title="Add interaction">+</button>
+            </div>
+            <div id="proto-ix-list"></div>
+          </div>
+          <!-- Scroll behavior (frames only) -->
+          <div class="psec" id="proto-frame-sec" style="display:none;">
+            <div class="proto-row-hdr" style="margin-bottom:8px;">
+              <span class="proto-row-label">Scroll behavior</span>
+            </div>
+            <div class="prow">
+              <span style="font-size:11px;color:var(--text3);flex:1;">Overflow</span>
+              <select id="proto-scroll-sel" class="mini-select" onchange="setScrollBehavior(this.value)">
+                <option value="none">No scrolling</option>
+                <option value="vertical">Vertical</option>
+                <option value="horizontal">Horizontal</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -212,10 +288,26 @@
         <svg viewBox="0 0 16 16" fill="none"><path d="M6 2v5M8 2v5M10 2v5M4 7v4a4 4 0 008 0V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <span class="tt">Pan  H</span>
       </button>
-      <button class="tb" id="tb-frame" onclick="setTool('frame')">
-        <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 5.5h12M5.5 2v12" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2" opacity=".5"/></svg>
-        <span class="tt">Frame  F</span>
-      </button>
+      <!-- Frame + Section dropdown -->
+      <div style="position:relative;display:flex;align-items:center;">
+        <button class="tb" id="tb-frame" onclick="setTool('frame')" style="padding-right:4px;">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 5.5h12M5.5 2v12" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2" opacity=".5"/></svg>
+          <span class="tt">Frame  F</span>
+        </button>
+        <button id="tb-frame-dd-btn" onclick="toggleFrameDropdown(event)" style="background:none;border:none;color:var(--text3);font-size:8px;cursor:pointer;padding:2px 3px;height:28px;line-height:1;border-radius:4px;" title="More frame types">▾</button>
+        <div id="frame-tool-dd" style="display:none;position:absolute;top:calc(100%+4px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:4px;z-index:500;white-space:nowrap;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.4);">
+          <div class="fdd-item" onclick="setTool('frame');closeFrameDropdown()">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 5.5h12M5.5 2v12" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2" opacity=".5"/></svg>
+            Frame <span style="color:var(--text3);font-size:9px;margin-left:auto;">F</span>
+          </div>
+          <div class="fdd-item" onclick="setTool('section');closeFrameDropdown()">
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13"><rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2" opacity=".8"/><path d="M1.5 5.5h13" stroke="currentColor" stroke-width="1" opacity=".5"/></svg>
+            Section <span style="color:var(--text3);font-size:9px;margin-left:auto;">⇧S</span>
+          </div>
+        </div>
+      </div>
+      <!-- hidden btn for setTool highlight -->
+      <button class="tb" id="tb-section" style="display:none;" onclick="setTool('section')"></button>
     </div>
 
     <!-- Shapes -->
@@ -231,6 +323,10 @@
       <button class="tb" id="tb-line" onclick="setTool('line')">
         <svg viewBox="0 0 16 16" fill="none"><line x1="3" y1="13" x2="13" y2="3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <span class="tt">Line  L</span>
+      </button>
+      <button class="tb" id="tb-pen" onclick="setTool('pen')">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M3 13l1.5-1.5M9 2l4 4-7.5 7.5-1.5-4L9 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="9" cy="2" r="1" fill="currentColor" opacity=".6"/></svg>
+        <span class="tt">Pen  P</span>
       </button>
       <button class="tb" id="tb-text" onclick="setTool('text')">
         <svg viewBox="0 0 16 16" fill="none"><path d="M3 4h10M8 4v9M5.5 13h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -272,6 +368,31 @@
   </div>
 </div>
 <div id="notif"></div>
+
+<!-- ══════════════ RICH TEXT FORMAT BAR ══════════════ -->
+<div id="text-fmt-bar" tabindex="-1">
+  <select id="tfb-font" title="Font family" onchange="applyFmtFont(this.value)">
+    <option value="'DM Sans',sans-serif">DM Sans</option>
+    <option value="'DM Mono',monospace">Mono</option>
+    <option value="Georgia,serif">Georgia</option>
+    <option value="Impact,fantasy">Impact</option>
+    <option value="Arial,sans-serif">Arial</option>
+    <option value="'Times New Roman',serif">Times</option>
+  </select>
+  <input id="tfb-size" type="number" min="6" max="400" title="Font size (px)" onchange="applyFmtFontSize(+this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+  <div class="tfb-sep"></div>
+  <button class="tfb-btn" data-cmd="bold"         title="Bold ⌘B"        onmousedown="event.preventDefault();applyFmtCmd('bold')"><b>B</b></button>
+  <button class="tfb-btn" data-cmd="italic"        title="Italic ⌘I"      onmousedown="event.preventDefault();applyFmtCmd('italic')"><i>I</i></button>
+  <button class="tfb-btn" data-cmd="underline"     title="Underline ⌘U"   onmousedown="event.preventDefault();applyFmtCmd('underline')"><u>U</u></button>
+  <button class="tfb-btn" data-cmd="strikeThrough" title="Strikethrough"   onmousedown="event.preventDefault();applyFmtCmd('strikeThrough')"><s>S</s></button>
+  <div class="tfb-sep"></div>
+  <div class="tfb-color-wrap" title="Text color">
+    <div id="tfb-color-swatch" style="width:100%;height:100%;border-radius:3px;background:#111;pointer-events:none;"></div>
+    <input type="color" id="tfb-color" value="#111111"
+      oninput="applyFmtColor(this.value);document.getElementById('tfb-color-swatch').style.background=this.value;"
+      onmousedown="event.stopPropagation()">
+  </div>
+</div>
 
 <script src="app.js" defer></script>
 </body>
