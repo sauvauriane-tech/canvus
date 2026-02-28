@@ -328,6 +328,8 @@ function mkEl(type, x, y, w, h) {
     html: '',        // rich text innerHTML (used by text elements)
     // Effects
     effects: [],
+    // Layout grids (frames only)
+    layoutGrids: [],
     // Vector path (pen tool)
     pathData: null,
     pathClosed: false,
@@ -955,6 +957,7 @@ function renderElement(el) {
     }
     if (el.type==='frame') {
       dom.classList.add('cel-frame');
+      renderLayoutGrid(dom, el);
       if (el.w > 0) {
         const lbl = document.createElement('div');
         lbl.className = 'frame-label';
@@ -3158,6 +3161,48 @@ function updateProps() {
     `);
   }
 
+  // Layout Grid — frames only, single select
+  if (!multi && el.type==='frame') {
+    const grids = el.layoutGrids || [];
+    const gridRowsHTML = grids.map((g, i) => {
+      const hexColor = g.color||'#ff0000';
+      return `
+        <div style="display:flex;flex-direction:column;gap:4px;padding:5px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;gap:4px;align-items:center;">
+            <div class="fill-swatch" style="background:${hexColor};opacity:${g.opacity/100};width:16px;height:16px;flex-shrink:0;">
+              <input type="color" value="${hexColor}" oninput="setLayoutGrid(${el.id},${i},'color',this.value)">
+            </div>
+            <select class="pinp" style="flex:1;" onchange="setLayoutGrid(${el.id},${i},'type',this.value)">
+              <option value="columns"${g.type==='columns'?' selected':''}>Columns</option>
+              <option value="rows"${g.type==='rows'?' selected':''}>Rows</option>
+              <option value="grid"${g.type==='grid'?' selected':''}>Grid</option>
+            </select>
+            <button class="fill-eye" onclick="toggleLayoutGridVisible(${el.id},${i})" title="${g.visible?'Hide':'Show'} grid">${g.visible?'◉':'○'}</button>
+            <button class="fill-del" onclick="deleteLayoutGrid(${el.id},${i})" title="Remove">−</button>
+          </div>
+          <div class="pgrid2">
+            ${g.type!=='grid'?`
+              <div class="prow"><span class="plbl-text">${g.type==='columns'?'Cols':'Rows'}</span><input class="pinp" type="number" min="1" max="64" value="${g.count||12}" oninput="setLayoutGrid(${el.id},${i},'count',+this.value)"></div>
+              <div class="prow"><span class="plbl-text">Margin</span><input class="pinp" type="number" min="0" value="${g.margin||0}" oninput="setLayoutGrid(${el.id},${i},'margin',+this.value)"></div>
+              <div class="prow"><span class="plbl-text">Gutter</span><input class="pinp" type="number" min="0" value="${g.gutter||0}" oninput="setLayoutGrid(${el.id},${i},'gutter',+this.value)"></div>
+            `:`
+              <div class="prow"><span class="plbl-text">Size</span><input class="pinp" type="number" min="1" value="${g.gutter||8}" oninput="setLayoutGrid(${el.id},${i},'gutter',+this.value)"></div>
+            `}
+            <div class="prow"><span class="plbl-text">Opacity</span><input class="pinp" type="number" min="0" max="100" value="${g.opacity||10}" oninput="setLayoutGrid(${el.id},${i},'opacity',+this.value)"></div>
+          </div>
+        </div>`;
+    }).join('');
+    sections.push(`
+      <div class="psec">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span class="psec-title" style="margin-bottom:0;">Layout Grid</span>
+          <button onclick="addLayoutGrid(${el.id})" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 9px;font-size:9px;color:var(--text3);cursor:pointer;">+ Add</button>
+        </div>
+        ${grids.length ? gridRowsHTML : '<span style="font-size:10px;color:var(--text3);">No grids — click + to add</span>'}
+      </div>
+    `);
+  }
+
   // ── Fill Layers (all element types except text and video) ──
   if (el.type !== 'text' && el.type !== 'video') {
     const fills = el.fills || [];
@@ -4393,6 +4438,84 @@ function setAL(elId, key, val) {
   const el=getEl(elId); if(!el||!el.autoLayout) return;
   el.autoLayout[key]=val;
   renderAll();
+}
+
+// ── Layout Grid helpers ──
+function addLayoutGrid(elId) {
+  const el=getEl(elId); if(!el||el.type!=='frame') return;
+  pushUndo();
+  if (!el.layoutGrids) el.layoutGrids = [];
+  el.layoutGrids.push({type:'columns', count:12, gutter:16, margin:16, color:'#ff0000', opacity:10, visible:true});
+  renderAll(); updateProps();
+}
+function deleteLayoutGrid(elId, idx) {
+  const el=getEl(elId); if(!el||!el.layoutGrids) return;
+  pushUndo();
+  el.layoutGrids.splice(idx,1);
+  renderAll(); updateProps();
+}
+function setLayoutGrid(elId, idx, key, val) {
+  const el=getEl(elId); if(!el||!el.layoutGrids||!el.layoutGrids[idx]) return;
+  el.layoutGrids[idx][key] = val;
+  renderAll();
+}
+function toggleLayoutGridVisible(elId, idx) {
+  const el=getEl(elId); if(!el||!el.layoutGrids||!el.layoutGrids[idx]) return;
+  el.layoutGrids[idx].visible = !el.layoutGrids[idx].visible;
+  renderAll(); updateProps();
+}
+
+function renderLayoutGrid(frameDom, el) {
+  if (!el.layoutGrids || !el.layoutGrids.length) return;
+  const w = el.w, h = el.h;
+  el.layoutGrids.forEach(grid => {
+    if (!grid.visible) return;
+    const rgba = `${grid.color}${Math.round(grid.opacity/100*255).toString(16).padStart(2,'0')}`;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:9000;overflow:hidden;`;
+
+    if (grid.type === 'columns') {
+      const count = Math.max(1, grid.count||12);
+      const margin = grid.margin||0;
+      const gutter = grid.gutter||0;
+      const totalGutters = (count-1)*gutter;
+      const colW = (w - margin*2 - totalGutters) / count;
+      for (let i=0; i<count; i++) {
+        const x = margin + i*(colW+gutter);
+        const col = document.createElement('div');
+        col.style.cssText = `position:absolute;top:0;bottom:0;left:${x}px;width:${colW}px;background:${rgba};`;
+        overlay.appendChild(col);
+      }
+    } else if (grid.type === 'rows') {
+      const count = Math.max(1, grid.count||5);
+      const margin = grid.margin||0;
+      const gutter = grid.gutter||0;
+      const totalGutters = (count-1)*gutter;
+      const rowH = (h - margin*2 - totalGutters) / count;
+      for (let i=0; i<count; i++) {
+        const y = margin + i*(rowH+gutter);
+        const row = document.createElement('div');
+        row.style.cssText = `position:absolute;left:0;right:0;top:${y}px;height:${rowH}px;background:${rgba};`;
+        overlay.appendChild(row);
+      }
+    } else if (grid.type === 'grid') {
+      const size = Math.max(1, grid.gutter||8);
+      // Vertical lines
+      for (let x=0; x<w; x+=size) {
+        const ln = document.createElement('div');
+        ln.style.cssText = `position:absolute;top:0;bottom:0;left:${x}px;width:1px;background:${rgba};`;
+        overlay.appendChild(ln);
+      }
+      // Horizontal lines
+      for (let y=0; y<h; y+=size) {
+        const ln = document.createElement('div');
+        ln.style.cssText = `position:absolute;left:0;right:0;top:${y}px;height:1px;background:${rgba};`;
+        overlay.appendChild(ln);
+      }
+    }
+
+    frameDom.appendChild(overlay);
+  });
 }
 
 // ════════════════════════════════════════════════════════════
