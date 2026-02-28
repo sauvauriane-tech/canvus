@@ -348,6 +348,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 .rh.s {bottom:-3px;left:calc(50% - 3px);cursor:s-resize;}
 .rh.sw{bottom:-3px;left:-3px;cursor:sw-resize;}
 .rh.w {left:-3px;top:calc(50% - 3px);cursor:w-resize;}
+.rh.rot{border-radius:50%;cursor:crosshair;background:#fff;border:1.5px solid var(--sel);}
 
 /* Size badge — shown below selected element on canvas */
 .sel-size-badge{

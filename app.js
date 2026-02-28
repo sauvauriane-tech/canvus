@@ -13,6 +13,7 @@ const S = {
   protoMode: false, protoFrom: null,
   coachOn: false,
   _spacePanning: false, _prevTool: 'select',
+  _exportScale: 1, _exportFmt: 'png',
   altDown: false,
   hoveredId: null,
   protoConns: [],
@@ -306,7 +307,8 @@ function mkEl(type, x, y, w, h) {
     fill: 'transparent',       // legacy compat — computed from fills[]
     stroke: 'none',
     strokeWidth: type==='frame'?1:2,
-    rx:0, opacity:100,
+    strokeAlign: 'center', strokeDash: false,
+    rx:0, cornerRadii:null, rotation:0, opacity:100,
     text:'', fontSize:16, lineHeight:24, fontWeight:'400', textColor:'#111111',
     textAlign:'left', letterSpacing:0, textTransform:'none',
     visible:true, locked:false,
@@ -535,7 +537,7 @@ function syncMastersToInstances() {
   });
 }
 
-const _SYNC_PROPS = ['stroke','strokeWidth','rx','opacity','fill','fills','w','h','fontSize','fontWeight','textColor','lineHeight','fontStyle','text','html'];
+const _SYNC_PROPS = ['stroke','strokeWidth','strokeAlign','strokeDash','rx','cornerRadii','rotation','opacity','fill','fills','w','h','fontSize','fontWeight','textColor','lineHeight','fontStyle','text','html'];
 
 function _syncInstFromMaster(inst, master) {
   const ov = inst.overrides||{};
@@ -900,8 +902,18 @@ const BLEND_MODES = ['normal','multiply','screen','overlay','darken','lighten','
 
 function applyFillsToDiv(dom, el, extraStyle) {
   const visFills = (el.fills||[]).filter(f=>f.visible);
-  const borderCSS = (el.stroke && el.stroke!=='none') ? `border:${el.strokeWidth||1}px solid ${el.stroke};` : '';
-  const radiusCSS = extraStyle || `border-radius:${el.rx||0}px;`;
+  const borderCSS = (() => {
+    if (!el.stroke || el.stroke==='none') return '';
+    const w = el.strokeWidth||1, c = el.stroke;
+    const dash = el.strokeDash ? 'dashed' : 'solid';
+    const align = el.strokeAlign || 'center';
+    if (align==='inside')  return `box-shadow:inset 0 0 0 ${w}px ${c};`;
+    if (align==='outside') return `box-shadow:0 0 0 ${w}px ${c};`;
+    return `border:${w}px ${dash} ${c};`;
+  })();
+  const radiusCSS = extraStyle || (el.cornerRadii
+    ? `border-radius:${el.cornerRadii.tl||0}px ${el.cornerRadii.tr||0}px ${el.cornerRadii.br||0}px ${el.cornerRadii.bl||0}px;`
+    : `border-radius:${el.rx||0}px;`);
   const baseCSS = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.w}px;height:${el.h}px;opacity:${el.opacity/100};${radiusCSS}${borderCSS}`;
 
   if (visFills.length === 0) {
@@ -968,7 +980,7 @@ function renderElement(el) {
   } else if (el.type==='ellipse') {
     dom = document.createElement('div');
     applyFillsToDiv(dom, el, 'border-radius:50%;');
-    if (el.stroke!=='none') dom.style.border=`${el.strokeWidth}px solid ${el.stroke}`;
+    // stroke is handled inside applyFillsToDiv via borderCSS
   } else if (el.type==='line') {
     dom = document.createElementNS('http://www.w3.org/2000/svg','svg');
     dom.style.cssText = `position:absolute;left:${el.x}px;top:${el.y}px;overflow:visible;`;
@@ -1030,7 +1042,8 @@ function renderElement(el) {
     dom.addEventListener('keyup', updateFmtBarState);
   } else if (el.type==='video') {
     dom = document.createElement('div');
-    dom.style.cssText = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.w}px;height:${el.h}px;opacity:${el.opacity/100};background:#111;border-radius:${el.rx||0}px;overflow:hidden;`;
+    const _vidRad = el.cornerRadii ? `${el.cornerRadii.tl||0}px ${el.cornerRadii.tr||0}px ${el.cornerRadii.br||0}px ${el.cornerRadii.bl||0}px` : `${el.rx||0}px`;
+    dom.style.cssText = `position:absolute;left:${el.x}px;top:${el.y}px;width:${el.w}px;height:${el.h}px;opacity:${el.opacity/100};background:#111;border-radius:${_vidRad};overflow:hidden;`;
     const _vid = document.createElement('video');
     _vid.src = el.videoSrc || '';
     _vid.style.cssText = 'width:100%;height:100%;object-fit:cover;pointer-events:none;';
@@ -1178,9 +1191,27 @@ function renderElement(el) {
     }
   });
 
-  if (el.flipH || el.flipV) {
-    dom.style.transform = `scale(${el.flipH?-1:1},${el.flipV?-1:1})`;
+  const _rot = el.rotation || 0;
+  const _flip = (el.flipH || el.flipV) ? ` scale(${el.flipH?-1:1},${el.flipV?-1:1})` : '';
+  if (_rot || el.flipH || el.flipV) {
+    dom.style.transform = `rotate(${_rot}deg)${_flip}`;
     dom.style.transformOrigin = 'center center';
+  }
+
+  // Rotation handle — shown only on single-select
+  if (isSel && !isMulti && el.type !== 'line' && el.type !== 'group') {
+    const hOff = Math.max(20, 28 / S.zoom);
+    const hSz  = Math.max(7,  10 / S.zoom);
+    const rotH = document.createElement('div');
+    rotH.className = 'rh rot';
+    rotH.style.cssText = `width:${hSz}px;height:${hSz}px;left:calc(50% - ${hSz/2}px);top:-${hOff+hSz}px;`;
+    rotH.title = 'Rotate (Shift = 15° snap)';
+    rotH.addEventListener('mousedown', ev => { ev.stopPropagation(); startRotate(ev, el.id); });
+    dom.appendChild(rotH);
+    // Connector line
+    const rotLine = document.createElement('div');
+    rotLine.style.cssText = `position:absolute;width:1px;background:var(--sel);opacity:.5;left:calc(50% - 0.5px);top:-${hOff}px;height:${hOff}px;pointer-events:none;`;
+    dom.appendChild(rotLine);
   }
 
   // Flow-start badge
@@ -1400,6 +1431,15 @@ document.addEventListener('mousemove', ev => {
     el.x=x;el.y=y;el.w=w;el.h=h;
     renderAll(); updateProps(); return;
   }
+  if (D.mode==='rotate'&&D.rotElId) {
+    const el=getEl(D.rotElId); if(!el) return;
+    const cx=el.x+el.w/2, cy=el.y+el.h/2;
+    const curAngle=Math.atan2(pos.y-cy, pos.x-cx)*180/Math.PI;
+    let newRot=D.rotStart+(curAngle-D.rotStartAngle);
+    if (ev.shiftKey) newRot=Math.round(newRot/15)*15;
+    el.rotation=((newRot%360)+360)%360;
+    renderAll(); updateProps(); return;
+  }
   if (D.mode==='group-resize'&&D.groupBBox&&D.groupEls) {
     const dx=pos.x-D.startPos.x, dy=pos.y-D.startPos.y;
     let {x:bx,y:by,w:bw,h:bh}=D.groupBBox, dir=D.resizeHandle;
@@ -1515,6 +1555,7 @@ document.addEventListener('mouseup', ev => {
     if(S.coachOn) runCoach();
   }
   if (D.mode==='resize'){ if(S.coachOn) runCoach(); }
+  if (D.mode==='rotate'){ D.rotElId=null; if(S.coachOn) runCoach(); }
   D.mode=null;
 });
 
@@ -1534,6 +1575,17 @@ function startMove(ev, skipUndo) {
   D.mode='move'; D.startPos=screenToCanvas(ev.clientX,ev.clientY);
   D.moveStarts={};
   S.selIds.forEach(id=>{ const el=getEl(id); if(el) D.moveStarts[id]={x:el.x,y:el.y}; });
+}
+
+function startRotate(ev, id) {
+  pushUndo();
+  D.mode = 'rotate';
+  const el = getEl(id); if (!el) return;
+  if (!S.selIds.includes(id)) S.selIds = [id];
+  const pos = screenToCanvas(ev.clientX, ev.clientY);
+  D.rotElId = id;
+  D.rotStart = el.rotation || 0;
+  D.rotStartAngle = Math.atan2(pos.y - (el.y + el.h/2), pos.x - (el.x + el.w/2)) * 180 / Math.PI;
 }
 
 function startResize(ev, id, dir) {
@@ -2849,6 +2901,11 @@ function updateProps() {
             <input class="pinp" type="number" value="${Math.round(el.h)}" onchange="SPH(${el.id},+this.value)">
           </div>
         </div>
+        <div class="prow" style="margin-top:4px;">
+          <span class="plbl">°</span>
+          <input class="pinp" type="number" value="${Math.round(el.rotation||0)}" onchange="SP('rotation',((+this.value%360)+360)%360)" style="flex:1;">
+          ${(el.rotation||0)!==0?`<button onclick="SP('rotation',0)" title="Reset rotation" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:0 4px;font-size:13px;">↺</button>`:''}
+        </div>
         <div class="prow" style="margin-top:4px;justify-content:space-between;">
           <button
             id="lock-prop-btn"
@@ -2857,7 +2914,33 @@ function updateProps() {
             ${locked?'🔗':'⛓️'} Lock Proportions
           </button>
         </div>
-        ${(el.type==='rect'||el.type==='frame')?`<div class="prow" style="margin-top:5px;"><span class="plbl-text" style="margin-right:6px;">Radius</span><input class="pinp" type="number" min="0" value="${el.rx}" onchange="SP('rx',+this.value)"></div>`:''}
+        ${(el.type==='rect'||el.type==='frame')?`<div style="margin-top:5px;">
+          <div class="prow">
+            <span class="plbl-text" style="margin-right:6px;">Radius</span>
+            <input class="pinp" type="number" min="0" value="${el.cornerRadii?Math.max(el.cornerRadii.tl||0,el.cornerRadii.tr||0,el.cornerRadii.br||0,el.cornerRadii.bl||0):el.rx}"
+              onchange="SP('rx',+this.value);const _e=getEl(${el.id});if(_e&&_e.cornerRadii){const v=+this.value;_e.cornerRadii={tl:v,tr:v,br:v,bl:v};renderAll();updateProps();}"
+              style="flex:1;">
+            <button class="fmt-btn${el.cornerRadii?' on':''}" onclick="toggleCornerRadii(${el.id})" title="${el.cornerRadii?'Collapse to uniform':'Per-corner radius'}" style="font-size:10px;padding:2px 6px;flex-shrink:0;">⊞</button>
+          </div>
+          ${el.cornerRadii?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px;">
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:9px;color:var(--text3);width:14px;">TL</span>
+              <input class="pinp" type="number" min="0" value="${el.cornerRadii.tl||0}" onchange="setCornerRadius(${el.id},'tl',+this.value)" style="flex:1;">
+            </div>
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:9px;color:var(--text3);width:14px;">TR</span>
+              <input class="pinp" type="number" min="0" value="${el.cornerRadii.tr||0}" onchange="setCornerRadius(${el.id},'tr',+this.value)" style="flex:1;">
+            </div>
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:9px;color:var(--text3);width:14px;">BL</span>
+              <input class="pinp" type="number" min="0" value="${el.cornerRadii.bl||0}" onchange="setCornerRadius(${el.id},'bl',+this.value)" style="flex:1;">
+            </div>
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:9px;color:var(--text3);width:14px;">BR</span>
+              <input class="pinp" type="number" min="0" value="${el.cornerRadii.br||0}" onchange="setCornerRadius(${el.id},'br',+this.value)" style="flex:1;">
+            </div>
+          </div>`:''}
+        </div>`:''}
         ${el.type==='frame'&&!el.isComponent&&!el.componentId?`<div style="margin-top:6px;display:flex;gap:5px;"><button class="btn btn-ghost" style="flex:1;font-size:10px;" onclick="createComponent()" title="Convert to reusable component">⬡ Create Component</button></div>`:''}
         ${el.type==='group'?`<div style="margin-top:6px;display:flex;gap:5px;"><button class="btn btn-ghost" style="flex:1;font-size:10px;" onclick="ungroupSelected()">Ungroup ⇧⌘G</button><button class="btn btn-ghost" style="flex:1;font-size:10px;" onclick="createComponent()" title="Convert to reusable component">⬡ Component</button></div>`:''}
       </div>
@@ -2914,21 +2997,34 @@ function updateProps() {
     const allH = els.map(e=>Math.round(e.h));
     const wSame = allW.every(w=>w===allW[0]);
     const hSame = allH.every(h=>h===allH[0]);
+    const rotVals = els.map(e=>e.rotation||0);
+    const rotSame = rotVals.every(r=>r===rotVals[0]);
+    const rxVals  = els.map(e=>e.rx||0);
+    const rxSame  = rxVals.every(r=>r===rxVals[0]);
+    const opVals  = els.map(e=>e.opacity||100);
+    const opSame  = opVals.every(o=>o===opVals[0]);
 
-    // Fill: get first visible solid fill of each element
+    // Fill: first visible solid fill of each element
     const firstColors = els.map(e=>{
       const f=(e.fills||[]).find(f=>f.visible!==false&&f.type==='solid');
       return f?f.color:null;
     });
-    const allHaveColor = firstColors.every(c=>c!==null);
-    const colorSame = allHaveColor && firstColors.every(c=>c===firstColors[0]);
+    const anyHaveColor = firstColors.some(c=>c!==null);
+    const colorSame = anyHaveColor && firstColors.every(c=>c===firstColors[0]);
 
-    // Stroke: first stroke value of each element
+    // Stroke
     const strokes = els.map(e=>e.stroke&&e.stroke!=='none'?e.stroke:null);
-    const allHaveStroke = strokes.every(s=>s!==null);
-    const strokeSame = allHaveStroke && strokes.every(s=>s===strokes[0]);
+    const anyHaveStroke = strokes.some(s=>s!==null);
+    const strokeSame = anyHaveStroke && strokes.every(s=>s===strokes[0]);
     const strokeWidths = els.map(e=>e.strokeWidth||1);
     const strokeWidthSame = strokeWidths.every(w=>w===strokeWidths[0]);
+
+    // Inline helpers so onclick strings stay short
+    const _setFillAll  = `S.selIds.forEach(id=>{const e=getEl(id);if(e&&e.fills&&e.fills.length)e.fills[0].color=this.value;});renderAll();updateProps();`;
+    const _setStrkAll  = `S.selIds.forEach(id=>{const e=getEl(id);if(e)e.stroke=this.value;});renderAll();updateProps();`;
+    const _setSWAll    = `S.selIds.forEach(id=>{const e=getEl(id);if(e)e.strokeWidth=+this.value;});renderAll();updateProps();`;
+    const _eyeFill     = window&&window.EyeDropper ? `<button class="fill-eye" title="Pick from screen" onclick="(async()=>{try{const r=await new EyeDropper().open();S.selIds.forEach(id=>{const e=getEl(id);if(e&&e.fills&&e.fills.length)e.fills[0].color=r.sRGBHex;});renderAll();updateProps();}catch(x){}})()">⊕</button>` : '';
+    const _eyeStrk     = window&&window.EyeDropper ? `<button class="fill-eye" title="Pick from screen" onclick="(async()=>{try{const r=await new EyeDropper().open();S.selIds.forEach(id=>{const e=getEl(id);if(e)e.stroke=r.sRGBHex;});renderAll();updateProps();}catch(x){}})()">⊕</button>` : '';
 
     sections.push(`
       <div class="psec">
@@ -2949,37 +3045,81 @@ function updateProps() {
             }
           </div>
         </div>
+        <div class="pgrid2" style="margin-top:4px;">
+          <div class="prow">
+            <span class="plbl">°</span>
+            ${rotSame
+              ? `<input class="pinp" type="number" value="${Math.round(rotVals[0])}" onchange="SPM('rotation',((+this.value%360)+360)%360)">`
+              : `<input class="pinp" value="Mixed" style="color:var(--text3);" onfocus="this.select()" onchange="SPM('rotation',((+this.value%360)+360)%360)">`
+            }
+          </div>
+          <div class="prow">
+            <span class="plbl">R</span>
+            ${rxSame
+              ? `<input class="pinp" type="number" min="0" value="${rxVals[0]}" onchange="SPM('rx',Math.max(0,+this.value))">`
+              : `<input class="pinp" value="Mixed" style="color:var(--text3);" onfocus="this.select()" onchange="SPM('rx',Math.max(0,+this.value))">`
+            }
+          </div>
+        </div>
       </div>
+
       <div class="psec">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <span class="psec-title" style="margin-bottom:0;">Fill</span>
-          <button class="psec-add" onclick="S.selIds.forEach(id=>{const e=getEl(id);if(e&&e.type!=='text'){if(!e.fills)e.fills=[];e.fills.push(mkFill('#7c6aee'));}});renderAll();updateProps();">+</button>
+          <button class="psec-add" onclick="S.selIds.forEach(id=>{const e=getEl(id);if(e&&e.type!=='text'){if(!e.fills)e.fills=[];if(!e.fills.length)e.fills.push(mkFill('#7c6aee'));}});renderAll();updateProps();">+</button>
         </div>
-        ${colorSame
+        ${anyHaveColor
           ? `<div class="prow">
-               <div class="fill-swatch" style="background:${firstColors[0]};">
-                 <input type="color" value="${firstColors[0]}" onchange="S.selIds.forEach(id=>{const e=getEl(id);if(e&&e.fills&&e.fills[0])e.fills[0].color=this.value;});renderAll();updateProps();">
+               <div class="csw" style="background:${colorSame?firstColors[0]:'linear-gradient(135deg,#ccc 50%,#888 50%)'}">
+                 <input type="color" value="${colorSame?firstColors[0]:'#888888'}" oninput="${_setFillAll}">
                </div>
-               <span style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;">${firstColors[0].replace('#','').toUpperCase()}</span>
+               <input class="pinp" value="${colorSame?firstColors[0]:'Mixed'}" maxlength="7" style="flex:1;${colorSame?'':'color:var(--text3);'}" onfocus="this.select()" oninput="const c=this.value;if(c.match(/^#[0-9a-fA-F]{6}$/)){S.selIds.forEach(id=>{const e=getEl(id);if(e&&e.fills&&e.fills.length)e.fills[0].color=c;});renderAll();updateProps();}">
+               ${_eyeFill}
              </div>`
-          : `<div style="font-size:11px;color:var(--text3);padding:2px 0;">Mixed — click + to replace all</div>`
+          : `<div style="font-size:11px;color:var(--text3);padding:2px 0;">None — click + to add fill</div>`
         }
       </div>
+
       <div class="psec">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <span class="psec-title" style="margin-bottom:0;">Stroke</span>
-          <button class="psec-add" onclick="S.selIds.forEach(id=>{const e=getEl(id);if(e&&!e.stroke||e.stroke==='none')e.stroke='#666666';});renderAll();updateProps();">+</button>
+          <button class="psec-add" onclick="S.selIds.forEach(id=>{const e=getEl(id);if(e&&(!e.stroke||e.stroke==='none'))e.stroke='#666666';});renderAll();updateProps();">+</button>
         </div>
-        ${allHaveStroke
-          ? (strokeSame
-            ? `<div class="prow">
-                 <div class="fill-swatch" style="background:${strokes[0]};border-radius:4px;"></div>
-                 <span style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;">${strokes[0].replace('#','').toUpperCase()}</span>
-                 <input class="pinp" type="number" min="0" value="${strokeWidthSame?strokeWidths[0]:'—'}" style="width:36px;margin-left:auto;" onchange="S.selIds.forEach(id=>{const e=getEl(id);if(e)e.strokeWidth=+this.value;});renderAll();updateProps();"> px
-               </div>`
-            : `<div style="font-size:11px;color:var(--text3);padding:2px 0;">Mixed — click <b>+</b> to set all</div>`)
+        ${anyHaveStroke
+          ? `<div class="prow">
+               <div class="csw" style="background:${strokeSame?strokes.find(s=>s):('#888')}">
+                 <input type="color" value="${strokeSame?strokes.find(s=>s):'#888888'}" oninput="${_setStrkAll}">
+               </div>
+               <input class="pinp" value="${strokeSame?strokes.find(s=>s):'Mixed'}" maxlength="7" style="flex:1;${strokeSame?'':'color:var(--text3);'}" onfocus="this.select()" oninput="const c=this.value;if(c.match(/^#[0-9a-fA-F]{6}$/)){S.selIds.forEach(id=>{const e=getEl(id);if(e)e.stroke=c;});renderAll();updateProps();}">
+               ${_eyeStrk}
+               <input class="pinp" type="number" min="0" value="${strokeWidthSame?strokeWidths[0]:''}" placeholder="—" style="width:34px;flex:0 0 34px;" onchange="${_setSWAll}">
+               <span style="font-size:9px;color:var(--text3);">px</span>
+             </div>`
           : `<div style="font-size:11px;color:var(--text3);padding:2px 0;">None — click + to add</div>`
         }
+      </div>
+
+      <div class="psec">
+        <div class="psec-title">Layer</div>
+        <div class="prow">
+          <span class="plbl-text" style="margin-right:6px;">Opacity</span>
+          ${opSame
+            ? `<input class="pinp" type="number" value="${opVals[0]}" min="0" max="100" oninput="SPM('opacity',+this.value)">`
+            : `<input class="pinp" value="Mixed" style="color:var(--text3);" onfocus="this.select()" onchange="SPM('opacity',Math.min(100,Math.max(0,+this.value)))">`
+          }
+          <span style="font-size:10px;color:var(--text3);margin-left:3px;">%</span>
+        </div>
+      </div>
+
+      <div class="psec">
+        <div class="psec-title">Align</div>
+        <div style="display:flex;gap:3px;margin-bottom:4px;">
+          ${[['left','⬛←','Left'],['centerH','⬛|','Center H'],['right','→⬛','Right'],['top','⬛↑','Top'],['centerV','—⬛','Middle'],['bottom','↓⬛','Bottom']].map(([d,l,t])=>`<button class="fmt-btn" onclick="alignEls('${d}')" title="${t}" style="flex:1;padding:3px 2px;font-size:10px;">${l}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:3px;">
+          <button class="fmt-btn" onclick="distributeEls('h')" style="flex:1;font-size:10px;" title="Distribute horizontally">↔ Dist H</button>
+          <button class="fmt-btn" onclick="distributeEls('v')" style="flex:1;font-size:10px;" title="Distribute vertically">↕ Dist V</button>
+        </div>
       </div>
     `);
   }
@@ -3111,20 +3251,24 @@ function updateProps() {
     `);
   }
 
-  // Element opacity (always shown)
-  sections.push(`
-    <div class="psec">
-      <div class="psec-title">Layer</div>
-      <div class="prow">
-        <span class="plbl-text" style="margin-right:6px;">Opacity</span>
-        <input class="pinp" type="number" value="${el.opacity}" min="0" max="100" oninput="SPM('opacity',+this.value)">
-        <span style="font-size:10px;color:var(--text3);margin-left:3px;">%</span>
+  // Element opacity (single select only — multi shows it in its own block above)
+  if (!multi) {
+    sections.push(`
+      <div class="psec">
+        <div class="psec-title">Layer</div>
+        <div class="prow">
+          <span class="plbl-text" style="margin-right:6px;">Opacity</span>
+          <input class="pinp" type="number" value="${el.opacity}" min="0" max="100" oninput="SP('opacity',+this.value)">
+          <span style="font-size:10px;color:var(--text3);margin-left:3px;">%</span>
+        </div>
       </div>
-    </div>
-  `);
+    `);
+  }
 
   // Stroke (single)
   if (!multi) {
+    const sa = el.strokeAlign || 'center';
+    const sd = el.strokeDash || false;
     sections.push(`
       <div class="psec">
         <div class="psec-title">Stroke</div>
@@ -3136,6 +3280,14 @@ function updateProps() {
           ${window&&window.EyeDropper?`<button class="fill-eye" onclick="eyedropperPickStroke(${el.id})" title="Pick stroke color from screen">⊕</button>`:''}
           <input class="pinp" type="number" value="${el.strokeWidth}" min="0" style="width:40px;flex:0 0 40px;" oninput="SP('strokeWidth',+this.value)">
         </div>
+        ${el.stroke!=='none'?`
+        <div class="prow" style="margin-top:5px;gap:3px;">
+          <span class="plbl" style="flex-shrink:0;">Pos</span>
+          <div style="display:flex;gap:2px;flex:1;">
+            ${['inside','center','outside'].map(a=>`<button class="fmt-btn${sa===a?' on':''}" onclick="SP('strokeAlign','${a}')" title="${a} stroke" style="flex:1;font-size:10px;">${a.charAt(0).toUpperCase()+a.slice(1)}</button>`).join('')}
+          </div>
+          <button class="fmt-btn${sd?' on':''}" onclick="SP('strokeDash',${!sd})" title="Dashed stroke" style="margin-left:2px;letter-spacing:1px;font-size:11px;">- -</button>
+        </div>`:''}
       </div>
     `);
   }
@@ -3226,6 +3378,30 @@ function updateProps() {
     `);
   }
 
+  // Export
+  if (!multi) {
+    sections.push(`
+      <div class="psec">
+        <div class="psec-title">Export</div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="display:flex;gap:4px;align-items:center;">
+            <span class="plbl" style="width:38px;flex-shrink:0;">Scale</span>
+            <div style="display:flex;gap:2px;flex:1;">
+              ${[1,2,3].map(s=>`<button class="fmt-btn${S._exportScale===s?' on':''}" onclick="S._exportScale=${s};updateProps();">${s}×</button>`).join('')}
+            </div>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center;">
+            <span class="plbl" style="width:38px;flex-shrink:0;">Format</span>
+            <div style="display:flex;gap:2px;flex:1;">
+              ${['png','svg'].map(f=>`<button class="fmt-btn${S._exportFmt===f?' on':''}" onclick="S._exportFmt='${f}';updateProps();">${f.toUpperCase()}</button>`).join('')}
+            </div>
+          </div>
+          <button class="btn" style="font-size:11px;padding:5px;" onclick="exportElement(${el.id},S._exportScale,S._exportFmt)">↓ Export</button>
+        </div>
+      </div>
+    `);
+  }
+
   // Actions
   sections.push(`
     <div class="psec">
@@ -3292,6 +3468,175 @@ function deleteFill(elId, idx) {
   const el = getEl(elId); if (!el||!el.fills) return;
   el.fills.splice(idx, 1);
   syncLegacyFill(el);
+  renderAll(); updateProps();
+}
+
+// ════════════════════════════════════════════════════════════
+// EXPORT  (PNG via Canvas 2D + SVG)
+// ════════════════════════════════════════════════════════════
+function _rrPath(ctx, x, y, w, h, el) {
+  const cr = el.cornerRadii;
+  const R  = el.rx || 0;
+  const tl = Math.min(cr ? (cr.tl||0) : R, w/2, h/2);
+  const tr = Math.min(cr ? (cr.tr||0) : R, w/2, h/2);
+  const br = Math.min(cr ? (cr.br||0) : R, w/2, h/2);
+  const bl = Math.min(cr ? (cr.bl||0) : R, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+tl, y);
+  ctx.lineTo(x+w-tr, y); ctx.arcTo(x+w, y,   x+w,   y+tr, tr);
+  ctx.lineTo(x+w, y+h-br); ctx.arcTo(x+w, y+h, x+w-br, y+h, br);
+  ctx.lineTo(x+bl, y+h); ctx.arcTo(x,   y+h, x,     y+h-bl, bl);
+  ctx.lineTo(x, y+tl); ctx.arcTo(x,   y,   x+tl,  y, tl);
+  ctx.closePath();
+}
+
+function _drawElToCtx(ctx, el, ox, oy) {
+  const ex = el.x - ox, ey = el.y - oy;
+  const w = el.w, h = el.h;
+  ctx.save();
+  ctx.globalAlpha = (el.opacity||100) / 100;
+
+  if (el.type === 'line') {
+    const lc = (el.fills||[]).find(f=>f.visible)?.color || '#888899';
+    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex+w, ey+h);
+    ctx.strokeStyle = lc; ctx.lineWidth = el.strokeWidth||2;
+    ctx.lineCap = 'round'; ctx.stroke();
+    ctx.restore(); return;
+  }
+
+  if (el.type === 'text') {
+    const fStyle = el.fontStyle==='italic' ? 'italic ' : '';
+    ctx.font = `${fStyle}${el.fontWeight||400} ${el.fontSize||16}px sans-serif`;
+    ctx.fillStyle = el.textColor || '#111111';
+    ctx.textBaseline = 'top';
+    const lh = el.lineHeight || Math.round((el.fontSize||16) * 1.4);
+    (el.text||'').split('\n').forEach((line, i) => ctx.fillText(line, ex, ey + i*lh));
+    ctx.restore(); return;
+  }
+
+  // Shapes: rect, frame, ellipse, group, section
+  const fills = (el.fills||[]).filter(f=>f.visible);
+  fills.forEach(f => {
+    ctx.save();
+    ctx.globalAlpha = ((el.opacity||100)/100) * ((f.opacity||100)/100);
+    if (f.type === 'linear') {
+      const ang = (f.angle||0) * Math.PI / 180;
+      const gx1 = ex+w/2 - Math.cos(ang)*w/2, gy1 = ey+h/2 - Math.sin(ang)*h/2;
+      const gx2 = ex+w/2 + Math.cos(ang)*w/2, gy2 = ey+h/2 + Math.sin(ang)*h/2;
+      const g = ctx.createLinearGradient(gx1, gy1, gx2, gy2);
+      (f.stops||[]).forEach(s => g.addColorStop(s.offset, s.color));
+      ctx.fillStyle = g;
+    } else if (f.type === 'radial') {
+      const g = ctx.createRadialGradient(ex+w/2, ey+h/2, 0, ex+w/2, ey+h/2, Math.max(w,h)/2);
+      (f.stops||[]).forEach(s => g.addColorStop(s.offset, s.color));
+      ctx.fillStyle = g;
+    } else {
+      ctx.fillStyle = f.color || 'transparent';
+    }
+    if (el.type === 'ellipse') {
+      ctx.beginPath(); ctx.ellipse(ex+w/2, ey+h/2, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
+    } else {
+      _rrPath(ctx, ex, ey, w, h, el); ctx.fill();
+    }
+    ctx.restore();
+  });
+
+  if (el.stroke && el.stroke !== 'none') {
+    ctx.globalAlpha = (el.opacity||100)/100;
+    ctx.strokeStyle = el.stroke; ctx.lineWidth = el.strokeWidth||1;
+    if (el.type === 'ellipse') {
+      ctx.beginPath(); ctx.ellipse(ex+w/2, ey+h/2, w/2, h/2, 0, 0, Math.PI*2); ctx.stroke();
+    } else {
+      _rrPath(ctx, ex, ey, w, h, el); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+async function exportElement(elId, scale, format) {
+  const frame = getEl(elId); if (!frame) return;
+  scale = Math.max(1, scale||1);
+  const ox = frame.x, oy = frame.y;
+  const W = Math.ceil(frame.w * scale), H = Math.ceil(frame.h * scale);
+  const safeName = (frame.name||'export').replace(/[^\w\s-]/g,'').trim() || 'export';
+
+  // Collect children in render order
+  function getDescendants(pid) {
+    const ch = S.els.filter(e => e.parentId===pid && e.visible && e.page===S.page);
+    let all = [];
+    ch.forEach(c => { all.push(c); all = all.concat(getDescendants(c.id)); });
+    return all;
+  }
+  const children = getDescendants(frame.id);
+
+  if (format === 'svg') {
+    function elToSVGStr(el) {
+      const x = el.x-ox, y = el.y-oy, w = el.w, h = el.h, op = (el.opacity||100)/100;
+      const fills = (el.fills||[]).filter(f=>f.visible);
+      const fc = fills[0]?.type==='solid' ? fills[0].color : (fills.length ? '#888' : 'none');
+      const str = (el.stroke && el.stroke!=='none') ? `stroke="${el.stroke}" stroke-width="${el.strokeWidth||1}"` : 'stroke="none"';
+      if (el.type==='ellipse') return `<ellipse cx="${x+w/2}" cy="${y+h/2}" rx="${w/2}" ry="${h/2}" fill="${fc}" opacity="${op}" ${str}/>`;
+      if (el.type==='line')    return `<line x1="${x}" y1="${y}" x2="${x+w}" y2="${y+h}" stroke="${fc}" stroke-width="${el.strokeWidth||2}" opacity="${op}"/>`;
+      if (el.type==='text')    return `<text x="${x}" y="${y+(el.fontSize||16)}" font-size="${el.fontSize||16}" font-weight="${el.fontWeight||400}" fill="${el.textColor||'#111'}" opacity="${op}">${escHtml(el.text||'')}</text>`;
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${el.rx||0}" fill="${fc}" opacity="${op}" ${str}/>`;
+    }
+    const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${frame.w} ${frame.h}">\n${elToSVGStr(frame)}\n${children.map(elToSVGStr).join('\n')}\n</svg>`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'}));
+    a.download = safeName + '.svg';
+    a.click(); URL.revokeObjectURL(a.href);
+    return;
+  }
+
+  // PNG via Canvas 2D
+  const cvs = document.createElement('canvas');
+  cvs.width = W; cvs.height = H;
+  const ctx = cvs.getContext('2d');
+  ctx.scale(scale, scale);
+
+  _drawElToCtx(ctx, frame, ox, oy);
+
+  // Handle images async
+  const imgQueue = [];
+  function scheduleImg(el) {
+    if (!el.imageSrc) return;
+    const ex = el.x-ox, ey = el.y-oy;
+    imgQueue.push(new Promise(res => {
+      const img = new Image();
+      img.onload = () => { ctx.save(); ctx.drawImage(img, ex, ey, el.w, el.h); ctx.restore(); res(); };
+      img.onerror = res;
+      img.src = el.imageSrc;
+    }));
+  }
+  scheduleImg(frame);
+  children.forEach(child => { _drawElToCtx(ctx, child, ox, oy); scheduleImg(child); });
+
+  await Promise.all(imgQueue);
+
+  cvs.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${safeName}@${scale}x.png`;
+    a.click(); URL.revokeObjectURL(a.href);
+  }, 'image/png');
+}
+
+function toggleCornerRadii(elId) {
+  const el = getEl(elId); if (!el) return;
+  pushUndo();
+  if (el.cornerRadii) {
+    el.rx = el.cornerRadii.tl || 0;
+    el.cornerRadii = null;
+  } else {
+    el.cornerRadii = {tl: el.rx||0, tr: el.rx||0, br: el.rx||0, bl: el.rx||0};
+  }
+  renderAll(); updateProps();
+}
+
+function setCornerRadius(elId, corner, val) {
+  const el = getEl(elId); if (!el || !el.cornerRadii) return;
+  pushUndo();
+  el.cornerRadii[corner] = Math.max(0, val);
   renderAll(); updateProps();
 }
 
@@ -3582,7 +3927,7 @@ function renderLayerItem(container, el, depth) {
 
   // Render children if not collapsed
   if (isContainer && !el.collapsed) {
-    const children = S.els.filter(e=>e.parentId===el.id&&e.page===S.page);
+    const children = [...S.els].filter(e=>e.parentId===el.id&&e.page===S.page).reverse();
     children.forEach(child => renderLayerItem(container, child, depth+1));
   }
 }
