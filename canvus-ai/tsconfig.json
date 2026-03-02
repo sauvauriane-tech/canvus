@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target":           "ES2022",
+    "module":           "ESNext",
+    "moduleResolution": "bundler",
+    "lib":              ["ES2022"],
+    "strict":           true,
+    "noEmit":           false,
+    "outDir":           "dist",
+    "rootDir":          ".",
+    "esModuleInterop":  true,
+    "resolveJsonModule": true,
+    "types":            ["node", "jest"]
+  },
+  "include": ["ai/**/*", "cli/**/*", "tests/**/*", "backend/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

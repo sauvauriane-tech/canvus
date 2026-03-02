@@ -403,6 +403,36 @@ function buildFillCSS(el) {
   return layers.join(',');
 }
 
+function _textureDataUri(preset, scale) {
+  const s = Math.max(1, scale ?? 65) / 100;
+  if (preset === 'dots') {
+    const r = Math.max(1, Math.round(4 * s));
+    const sp = Math.max(r * 2, Math.round(12 * s));
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${sp}' height='${sp}'><circle cx='${sp/2}' cy='${sp/2}' r='${r}' fill='white'/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }
+  if (preset === 'lines') {
+    const sp = Math.max(2, Math.round(8 * s));
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${sp}' height='${sp}'><line x1='0' y1='${sp/2}' x2='${sp}' y2='${sp/2}' stroke='white' stroke-width='1'/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }
+  if (preset === 'grid') {
+    const sp = Math.max(2, Math.round(12 * s));
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${sp}' height='${sp}'><rect width='${sp}' height='${sp}' fill='none' stroke='white' stroke-width='0.5'/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }
+  // SVG turbulence-based presets
+  const cfg = {
+    noise:    {type:'fractalNoise', freq:`${(0.65*s).toFixed(3)}`,          oct:4},
+    grain:    {type:'turbulence',   freq:`${(1.20*s).toFixed(3)}`,          oct:1},
+    paper:    {type:'fractalNoise', freq:`${(0.04*s).toFixed(3)}`,          oct:5},
+    linen:    {type:'fractalNoise', freq:`${(0.04*s).toFixed(3)} ${(0.4*s).toFixed(3)}`, oct:2},
+    concrete: {type:'fractalNoise', freq:`${(0.035*s).toFixed(3)}`,         oct:6},
+  }[preset] || {type:'fractalNoise', freq:`${(0.65*s).toFixed(3)}`, oct:4};
+  const svg = `<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='t'><feTurbulence type='${cfg.type}' baseFrequency='${cfg.freq}' numOctaves='${cfg.oct}' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(#t)'/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
 function hexToRgbArr(hex) {
   hex = hex.replace('#','');
   if (hex.length===3) hex=hex.split('').map(c=>c+c).join('');
@@ -1512,7 +1542,7 @@ document.addEventListener('mouseup', ev => {
   if (D.mode==='marquee'){selBoxEl.style.display='none'; updateProps();}
   if (D.mode==='draw'){
     if (D.drawEl&&D.drawEl.w<4&&D.drawEl.h<4&&S.tool!=='text'){D.drawEl.w=120;D.drawEl.h=80;}
-    if (S.tool==='text'||S.tool==='frame'||S.tool==='section') setTool('select');
+    if (S.tool==='text'||S.tool==='frame'||S.tool==='section'||S.tool==='rect'||S.tool==='ellipse'||S.tool==='line') setTool('select');
     // Adopt newly drawn element into a frame if it lands inside one (not sections/frames)
     if (D.drawEl && D.drawEl.type!=='frame' && D.drawEl.type!=='section') {
       const el=D.drawEl;
@@ -2049,6 +2079,14 @@ function applyEffectsToEl(dom, el) {
     } else if (ef.type === 'glass') {
       bFilters.push(`blur(${ef.radius??12}px) saturate(180%)`);
       dom.classList.add('has-glass');
+    } else if (ef.type === 'texture') {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:30;border-radius:inherit;`
+        + `background-image:${_textureDataUri(ef.preset||'noise', ef.scale??65)};`
+        + `background-size:${ef.preset==='dots'||ef.preset==='lines'||ef.preset==='grid'?'auto':'cover'};`
+        + `opacity:${((ef.opacity??20)/100).toFixed(2)};mix-blend-mode:${ef.blend||'overlay'};`;
+      dom.style.overflow = 'hidden';
+      dom.appendChild(overlay);
     }
   });
   if (shadows.length) dom.style.boxShadow = shadows.join(', ');
@@ -3392,24 +3430,42 @@ function updateProps() {
   // Effects
   if (!multi) {
     const effs = el.effects || [];
-    const ETYPES = {'drop-shadow':'Drop Shadow','inner-shadow':'Inner Shadow','layer-blur':'Layer Blur','bg-blur':'Background Blur','noise':'Noise','glass':'Glass'};
+    const ETYPES = {'drop-shadow':'Drop Shadow','inner-shadow':'Inner Shadow','layer-blur':'Layer Blur','bg-blur':'Background Blur','noise':'Noise','glass':'Glass','texture':'Texture'};
+    const BLENDS = ['normal','overlay','multiply','screen','soft-light','hard-light','color-dodge','color-burn','luminosity'];
     const effRowsHTML = effs.map((ef, i) => {
       const needsColor = ef.type==='drop-shadow'||ef.type==='inner-shadow';
       const needsXY    = ef.type==='drop-shadow'||ef.type==='inner-shadow';
       const needsBlur  = ef.type==='drop-shadow'||ef.type==='inner-shadow';
       const needsR     = ef.type==='layer-blur'||ef.type==='bg-blur'||ef.type==='glass';
       const needsAmt   = ef.type==='noise';
-      return `<div class="eff-row">
-        <button class="eff-vis-btn" onclick="toggleEffVis(${el.id},${i})" title="${ef.visible?'Hide':'Show'}">${ef.visible?'●':'○'}</button>
-        <select class="eff-type-sel" onchange="changeEffType(${el.id},${i},this.value)">
-          ${Object.entries(ETYPES).map(([k,v])=>`<option value="${k}"${k===ef.type?' selected':''}>${v}</option>`).join('')}
-        </select>
-        ${needsColor?`<input type="color" class="eff-color" value="${ef.color||'#000000'}" oninput="setEff(${el.id},${i},'color',this.value)">`:``}
-        ${needsXY?`<input class="pinp" type="number" value="${ef.x??2}" style="width:30px;" title="X" oninput="setEff(${el.id},${i},'x',+this.value)"><input class="pinp" type="number" value="${ef.y??4}" style="width:30px;" title="Y" oninput="setEff(${el.id},${i},'y',+this.value)">`:``}
-        ${needsBlur?`<input class="pinp" type="number" value="${ef.blur??8}" style="width:34px;" title="Blur" oninput="setEff(${el.id},${i},'blur',+this.value)">`:``}
-        ${needsR?`<input class="pinp" type="number" value="${ef.radius??8}" style="width:34px;" title="Radius" oninput="setEff(${el.id},${i},'radius',+this.value)">`:``}
-        ${needsAmt?`<input class="pinp" type="number" value="${ef.amount??20}" style="width:34px;" title="Amount%" oninput="setEff(${el.id},${i},'amount',+this.value)">`:``}
-        <button class="fill-del" onclick="deleteEff(${el.id},${i})">−</button>
+      const isTexture  = ef.type==='texture';
+      return `<div class="eff-row" style="flex-wrap:wrap;row-gap:4px;">
+        <div style="display:flex;gap:4px;align-items:center;width:100%;">
+          <button class="eff-vis-btn" onclick="toggleEffVis(${el.id},${i})" title="${ef.visible?'Hide':'Show'}">${ef.visible?'●':'○'}</button>
+          <select class="eff-type-sel" onchange="changeEffType(${el.id},${i},this.value)">
+            ${Object.entries(ETYPES).map(([k,v])=>`<option value="${k}"${k===ef.type?' selected':''}>${v}</option>`).join('')}
+          </select>
+          ${needsColor?`<input type="color" class="eff-color" value="${ef.color||'#000000'}" oninput="setEff(${el.id},${i},'color',this.value)">`:``}
+          ${needsXY?`<input class="pinp" type="number" value="${ef.x??2}" style="width:30px;" title="X" oninput="setEff(${el.id},${i},'x',+this.value)"><input class="pinp" type="number" value="${ef.y??4}" style="width:30px;" title="Y" oninput="setEff(${el.id},${i},'y',+this.value)">`:``}
+          ${needsBlur?`<input class="pinp" type="number" value="${ef.blur??8}" style="width:34px;" title="Blur" oninput="setEff(${el.id},${i},'blur',+this.value)">`:``}
+          ${needsR?`<input class="pinp" type="number" value="${ef.radius??8}" style="width:34px;" title="Radius" oninput="setEff(${el.id},${i},'radius',+this.value)">`:``}
+          ${needsAmt?`<input class="pinp" type="number" value="${ef.amount??20}" style="width:34px;" title="Amount%" oninput="setEff(${el.id},${i},'amount',+this.value)">`:``}
+          <button class="fill-del" onclick="deleteEff(${el.id},${i})">−</button>
+        </div>
+        ${isTexture?`<div style="display:flex;gap:4px;align-items:center;width:100%;padding-left:20px;">
+          <select class="pinp" style="flex:1;" onchange="setEff(${el.id},${i},'preset',this.value)">
+            ${['noise','grain','paper','linen','concrete','dots','lines','grid'].map(p=>`<option value="${p}"${(ef.preset||'noise')===p?' selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join('')}
+          </select>
+          <input class="pinp" type="number" min="10" max="300" value="${ef.scale??65}" style="width:38px;" title="Scale %" oninput="setEff(${el.id},${i},'scale',+this.value)">
+          <span style="font-size:9px;color:var(--text3);flex-shrink:0;">%</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;width:100%;padding-left:20px;">
+          <select class="pinp" style="flex:1;" onchange="setEff(${el.id},${i},'blend',this.value)">
+            ${BLENDS.map(b=>`<option value="${b}"${(ef.blend||'overlay')===b?' selected':''}>${b}</option>`).join('')}
+          </select>
+          <input class="pinp" type="number" min="0" max="100" value="${ef.opacity??20}" style="width:38px;" title="Opacity %" oninput="setEff(${el.id},${i},'opacity',+this.value)">
+          <span style="font-size:9px;color:var(--text3);flex-shrink:0;">%</span>
+        </div>`:``}
       </div>`;
     }).join('');
     sections.push(`
@@ -4192,10 +4248,53 @@ function simulatePresence() {
   }, 800);
 }
 
-// ── WebSocket-ready hooks (implement later) ──
-// function connectWS(shareId) { ... }
-// function broadcastCursorPos(x, y) { ... }
-// function applyRemoteOp(op) { ... }
+// ── Canvus AI — WebSocket receiver ───────────────────────────────────────────
+// Connects to the Cloudflare Worker's Durable Object room.
+// When the CLI runs `canvus-ai "…" --apply`, the Worker broadcasts
+// { type:"ai:ops", ops:[] } here and we apply them live.
+//
+// Enable by setting window.CANVUS_AI_WS_URL before app.js loads, e.g.:
+//   <script>window.CANVUS_AI_WS_URL = "wss://canvus-ai.your-name.workers.dev";</script>
+// or leave unset to keep the stubs silent.
+
+(function initAISocket() {
+  const BASE = window.CANVUS_AI_WS_URL;
+  if (!BASE) return;                          // opt-in only
+
+  const room = new URLSearchParams(location.search).get('room') || 'default';
+  const wsUrl = BASE.replace(/^http/, 'ws') + '/ai/ws?room=' + encodeURIComponent(room);
+
+  let _ws, _pingTimer;
+
+  function connect() {
+    _ws = new WebSocket(wsUrl);
+
+    _ws.onopen = () => {
+      notify('Canvus AI connected');
+      _pingTimer = setInterval(() => _ws.readyState === 1 && _ws.send('ping'), 30000);
+    };
+
+    _ws.onmessage = (ev) => {
+      if (ev.data === 'pong') return;
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type !== 'ai:ops' || !Array.isArray(msg.ops)) return;
+      pushUndo();
+      applyOps(msg.ops);                      // defined in canvus-ai/ai/apply.js
+      renderAll(); updateProps(); updateLayers();
+      notify(`AI applied ${msg.ops.length} op${msg.ops.length !== 1 ? 's' : ''}`);
+    };
+
+    _ws.onclose = () => {
+      clearInterval(_pingTimer);
+      setTimeout(connect, 3000);              // reconnect after 3 s
+    };
+
+    _ws.onerror = () => _ws.close();
+  }
+
+  connect();
+})();
 
 
 function randomPastel(){
