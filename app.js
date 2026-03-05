@@ -5096,12 +5096,24 @@ async function sendAIPrompt() {
   };
 
   try {
-    const res  = await fetch(_AI_URL, {
+    const res = await fetch(_AI_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, document: doc, selIds: S.selIds }),
     });
-    const data = await res.json();
+    let data;
+    const text = await res.text();
+    try { data = JSON.parse(text); }
+    catch {
+      console.error('[Canvus AI] Non-JSON response', res.status, text.slice(0, 300));
+      status.textContent = `Worker error ${res.status} — see console for details.`;
+      btn.disabled = false; btn.textContent = 'Send'; return;
+    }
+    if (!res.ok) {
+      console.error('[Canvus AI] Worker error', res.status, data);
+      status.textContent = data.error || `Worker error ${res.status}.`;
+      btn.disabled = false; btn.textContent = 'Send'; return;
+    }
     if (data.ops?.length) {
       applyOps(data.ops);
       input.value = '';
@@ -5109,8 +5121,9 @@ async function sendAIPrompt() {
     } else {
       status.textContent = data.summary || data.error || 'No changes made.';
     }
-  } catch {
-    status.textContent = 'Could not reach the AI Worker.';
+  } catch (err) {
+    console.error('[Canvus AI] fetch failed:', err);
+    status.textContent = `Network error: ${err.message}`;
   }
 
   btn.disabled = false;
