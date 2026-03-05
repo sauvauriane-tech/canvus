@@ -5046,16 +5046,19 @@ Grid + Snap = clean spacing • Share to get feedback`,
     const t = localStorage.getItem('canvus-theme') || 'light';
     document.documentElement.dataset.theme = t;
     const btn = document.getElementById('theme-toggle');
-    if (btn) btn.textContent = t === 'light' ? '🌙' : '☀';
+    if (btn) btn.innerHTML = t === 'light' ? _ICON_MOON : _ICON_SUN;
   })();
 })();
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
+const _ICON_SUN  = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 1v1.2M6.5 10.8V12M1 6.5h1.2M10.8 6.5H12M2.85 2.85l.85.85M9.3 9.3l.85.85M9.3 2.85l-.85.85M3.7 9.3l-.85.85" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+const _ICON_MOON = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M10.2 7.2A4.7 4.7 0 0 1 5.8 2.8c0-.45.06-.88.18-1.3A4.7 4.7 0 1 0 10.2 7.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+
 function toggleTheme() {
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   document.documentElement.dataset.theme = next;
   localStorage.setItem('canvus-theme', next);
   const btn = document.getElementById('theme-toggle');
-  if (btn) btn.textContent = next === 'light' ? '🌙' : '☀';
+  if (btn) btn.innerHTML = next === 'light' ? _ICON_MOON : _ICON_SUN;
   renderGrid();
 }
