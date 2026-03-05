@@ -5059,3 +5059,67 @@ function toggleTheme() {
   if (btn) btn.textContent = next === 'light' ? '🌙' : '☀';
   renderGrid();
 }
+
+// ── Canvus AI panel ───────────────────────────────────────────────────────────
+const _AI_URL = 'https://canvus-ai.sauvauriane.workers.dev';
+
+function toggleAI() {
+  const panel = document.getElementById('ai-panel');
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) document.getElementById('ai-input').focus();
+}
+
+function closeAI() {
+  document.getElementById('ai-panel').classList.remove('open');
+}
+
+async function sendAIPrompt() {
+  const input  = document.getElementById('ai-input');
+  const status = document.getElementById('ai-status');
+  const btn    = document.getElementById('ai-send');
+  const prompt = input.value.trim();
+  if (!prompt) return;
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  status.textContent = 'Thinking…';
+
+  const doc = {
+    pageName: S.pages.find(p => p.id === S.page)?.name || 'Page',
+    page: S.page,
+    els: S.els.filter(e => e.page === S.page).map(e => ({
+      id: e.id, type: e.type, name: e.name,
+      x: e.x, y: e.y, w: e.w, h: e.h,
+      ...(e.parentId ? { parentId: e.parentId } : {}),
+      ...(e.text     ? { text: e.text }         : {}),
+    })),
+  };
+
+  try {
+    const res  = await fetch(_AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, document: doc, selIds: S.selIds }),
+    });
+    const data = await res.json();
+    if (data.ops?.length) {
+      applyOps(data.ops);
+      input.value = '';
+      status.textContent = data.summary || `Applied ${data.ops.length} change(s).`;
+    } else {
+      status.textContent = data.summary || data.error || 'No changes made.';
+    }
+  } catch {
+    status.textContent = 'Could not reach the AI Worker.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Send';
+}
+
+// Send on Enter (Shift+Enter = newline)
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('ai-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAIPrompt(); }
+  });
+});
