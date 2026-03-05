@@ -5204,19 +5204,11 @@ async function sendAIPrompt() {
         status.textContent = data.error || `Worker error ${res.status}.`;
         btn.disabled = false; btn.textContent = 'Send'; return;
       }
-      if (data.code) {
-        console.log('[Canvus AI] code:', data.code);
-        try {
-          pushUndo();
-          // eslint-disable-next-line no-eval
-          eval(data.code);
-        } catch (err) {
-          console.error('[Canvus AI] eval error:', err);
-          status.textContent = `AI error: ${err.message}`;
-          btn.disabled = false; btn.textContent = 'Send'; return;
-        }
+      if (data.ops?.length) {
+        const { applied, skipped } = applyOps(data.ops);
         input.value = '';
-        status.textContent = data.summary || 'Done.';
+        status.textContent = data.summary || `Applied ${applied.length} change${applied.length !== 1 ? 's' : ''}.`;
+        if (skipped.length) console.warn('[Canvus AI] skipped ops:', skipped);
       } else {
         status.textContent = data.summary || data.error || 'No changes made.';
       }

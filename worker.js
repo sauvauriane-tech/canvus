@@ -8,7 +8,29 @@
  *   wrangler secret put MISTRAL_API_KEY
  */
 
-// ─── Tool definition sent to Mistral ─────────────────────────────────────────
+// ─── Tool definitions ─────────────────────────────────────────────────────────
+const GENERATE_TOOL = {
+  type: 'function',
+  function: {
+    name: 'set_document',
+    description: 'Set the complete Canvus document. Call this with the full generated or modified document JSON.',
+    parameters: {
+      type: 'object',
+      required: ['document'],
+      properties: {
+        document: {
+          type: 'object',
+          description: 'Complete Canvus document JSON',
+        },
+        summary: {
+          type: 'string',
+          description: 'One-sentence plain-English summary of what was created or changed.',
+        },
+      },
+    },
+  },
+};
+
 const TOOLS = [
   {
     type: 'function',
@@ -69,6 +91,49 @@ RULES
 10. Keep changes minimal — don't modify unrelated elements.`;
 }
 
+function buildGenerateSystemPrompt() {
+  return `You are Canvus AI. Generate or modify a complete Canvus document based on the user's request.
+
+DOCUMENT SCHEMA (return this exact shape):
+{
+  "els": [ ...elements ],
+  "pages": [{ "id": 1, "name": "Page 1" }],
+  "page": 1,
+  "nextId": <highest element id + 1>,
+  "colorStyles": {},
+  "protoConns": [],
+  "comments": []
+}
+
+ELEMENT SCHEMA:
+{
+  "id": <unique integer, no gaps>,
+  "type": "rect" | "ellipse" | "frame" | "text" | "line",
+  "name": "<descriptive layer name>",
+  "page": 1,
+  "x": number, "y": number, "w": number, "h": number,
+  "fills": [{ "id": <unique int>, "type": "solid", "color": "#hex", "opacity": 100, "visible": true, "blend": "normal" }],
+  "rx": 0,
+  "stroke": null, "strokeWidth": 1,
+  "interactions": [], "effects": [],
+  "parentId": <parent frame id, omit if top-level>
+}
+
+TEXT ELEMENTS — add these extra fields:
+  "text": "...", "fontSize": 16, "fontWeight": 400, "textAlign": "left", "textColor": "#000000"
+
+RULES:
+1. Every element must have a unique integer id. Start at 1, no gaps.
+2. nextId must be greater than all element ids.
+3. Use a 1440×900 canvas by default. Align positions to 8px grid.
+4. Use hex colors only (e.g. "#2563EB"). No CSS named colors.
+5. Name layers semantically: "Hero Background", "CTA Button Label", etc.
+6. For sections/cards use a "frame" as a container with children referencing its id in parentId.
+   Children positions are relative to the frame's top-left.
+7. Always include a page background frame (type:"frame", x:0, y:0, w:1440, h:900).
+8. Call set_document with the complete document and a plain-English summary.`;
+}
+
 function buildDocSummary(doc, selIds) {
   const sel = selIds.length
     ? `Selected element IDs: [${selIds.join(', ')}]\n`
@@ -112,6 +177,72 @@ function jsonRes(data, status = 200) {
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
+
+    // ── POST /generate — full document generation ─────────────────────────────
+    if (pathname === '/generate') {
+      if (request.method !== 'POST') return jsonRes({ error: 'POST only' }, 405);
+
+      let body;
+      try { body = await request.json(); }
+      catch { return jsonRes({ error: 'Invalid JSON body' }, 400); }
+
+      const { prompt } = body;
+      if (!prompt) return jsonRes({ error: 'Missing prompt' }, 400);
+
+      if (!env.MISTRAL_API_KEY) {
+        return jsonRes({ error: 'MISTRAL_API_KEY secret not set on this Worker' }, 500);
+      }
+
+      let mistralRes;
+      try {
+        mistralRes = await fetch('https://api.mistral.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${env.MISTRAL_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'mistral-large-latest',
+            messages: [
+              { role: 'system', content: buildGenerateSystemPrompt() },
+              { role: 'user',   content: prompt },
+            ],
+            tools: [GENERATE_TOOL],
+            tool_choice: 'any',
+            temperature: 0.3,
+            max_tokens: 8192,
+          }),
+        });
+      } catch (err) {
+        return jsonRes({ error: 'Failed to reach Mistral: ' + err.message }, 502);
+      }
+
+      if (!mistralRes.ok) {
+        const errText = await mistralRes.text();
+        return jsonRes({ error: 'Mistral error: ' + errText }, 502);
+      }
+
+      const genData = await mistralRes.json();
+      const genMsg  = genData.choices?.[0]?.message;
+
+      if (!genMsg?.tool_calls?.length) {
+        return jsonRes({ error: 'Mistral did not return a document', summary: genMsg?.content || '' });
+      }
+
+      const genCall = genMsg.tool_calls.find(tc => tc.function?.name === 'set_document');
+      if (!genCall) return jsonRes({ error: 'No set_document call in response' });
+
+      let genArgs;
+      try { genArgs = JSON.parse(genCall.function.arguments); }
+      catch { return jsonRes({ error: 'Failed to parse tool arguments' }); }
+
+      // Optional KV save (graceful no-op when KV not configured)
+      if (env.CANVUS_STATE) {
+        await env.CANVUS_STATE.put('doc', JSON.stringify(genArgs.document)).catch(() => {});
+      }
+
+      return jsonRes({ document: genArgs.document, summary: genArgs.summary || '' });
+    }
 
     // ── POST /ai — AI prompt handler ──────────────────────────────────────────
     if (pathname === '/ai') {
