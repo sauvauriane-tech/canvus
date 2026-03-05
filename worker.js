@@ -88,7 +88,31 @@ RULES
 7. Colors: use hex. If the user says "brand purple" use #7c6aee (Canvus accent).
 8. If asked to "clean up" layout, prefer align_elements + distribute_elements over moving individually.
 9. Prototype connections use click trigger by default.
-10. Keep changes minimal — don't modify unrelated elements.`;
+10. Keep changes minimal — don't modify unrelated elements.
+
+OP SCHEMAS — use exactly these field names:
+set_fill:            { type, ids:[int], color?:'#hex', opacity?:0-100, fillIndex?:0, blend?:'normal', visible?:bool }
+add_fill:            { type, ids:[int], color:'#hex', opacity?:100, blend?:'normal' }
+remove_fill:         { type, ids:[int], fillIndex:int }
+set_stroke:          { type, ids:[int], color?:'#hex', width?:int, align?:'inside'|'outside'|'center', dash?:bool }
+set_property:        { type, ids:[int], key:string, value:any }
+move_elements:       { type, ids:[int], dx:number, dy:number }
+resize_element:      { type, id:int, x?:number, y?:number, w?:number, h?:number }
+rename_element:      { type, id:int, name:string }
+reorder_element:     { type, id:int, position:'front'|'back'|'forward'|'backward' }
+create_element:      { type, elType:'rect'|'ellipse'|'frame'|'text'|'line', x:int, y:int, w:int, h:int, name?:string, text?:string, fill?:'#hex', parentId?:int }
+delete_elements:     { type, ids:[int] }
+group_elements:      { type, ids:[int], name?:string }
+ungroup_elements:    { type, ids:[int] }
+add_effect:          { type, ids:[int], effectType:'drop-shadow'|'inner-shadow'|'layer-blur'|'bg-blur', color?:'#hex', opacity?:25, x?:2, y?:4, blur?:8 }
+remove_effect:       { type, ids:[int], effectIndex:int }
+set_auto_layout:     { type, id:int, direction:'row'|'column', gap:int, padding:int, align:'start'|'center'|'end' }
+remove_auto_layout:  { type, id:int }
+align_elements:      { type, ids:[int], direction:'left'|'right'|'top'|'bottom'|'center-h'|'center-v' }
+distribute_elements: { type, ids:[int], axis:'h'|'v' }
+add_prototype_connection: { type, fromId:int, toId:int, trigger?:'click', animation?:'instant' }
+batch:               { type, ops:[...ops] }
+IMPORTANT: ids is always an array of integers. Never use a single 'id' for multi-element ops.`;
 }
 
 function buildGenerateSystemPrompt() {
