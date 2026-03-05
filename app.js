@@ -5233,3 +5233,381 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAIPrompt(); }
   });
 });
+
+// ════════════════════════════════════════════════════════════
+// HTML IMPORT — Convert HTML+CSS subset to Canvus nodes
+// Uses the browser's own layout engine (hidden iframe) so all
+// CSS — flexbox, variables, cascade — is resolved for free.
+// ════════════════════════════════════════════════════════════
+
+let _htmlImportMode = 'page'; // 'page' | 'component'
+
+function showHTMLImportModal() {
+  document.getElementById('html-import-modal').classList.add('open');
+}
+function closeHTMLImportModal() {
+  document.getElementById('html-import-modal').classList.remove('open');
+}
+function setHTMLImportMode(mode) {
+  _htmlImportMode = mode;
+  document.getElementById('html-import-tab-page').classList.toggle('active', mode === 'page');
+  document.getElementById('html-import-tab-component').classList.toggle('active', mode === 'component');
+  document.getElementById('html-import-id-row').style.display = mode === 'component' ? 'flex' : 'none';
+}
+function htmlImportLoadFile(ev, target) {
+  const file = ev.target.files[0]; if (!file) return;
+  ev.target.value = '';
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById(`html-import-${target}`).value = e.target.result; };
+  reader.readAsText(file);
+}
+
+async function runHTMLImport() {
+  const htmlStr = document.getElementById('html-import-html').value.trim();
+  const cssStr  = document.getElementById('html-import-css').value.trim();
+  if (!htmlStr) { notify('Paste or load HTML to import'); return; }
+
+  const isComponent = _htmlImportMode === 'component';
+  const targetId    = isComponent ? document.getElementById('html-import-cid').value.trim() : '';
+  if (isComponent && !targetId) { notify('Enter a data-canvus-id to identify the component root'); return; }
+
+  closeHTMLImportModal();
+
+  const unsupported = [];
+  const newEls      = [];
+
+  // ── 1. Render in a sandboxed iframe for accurate layout ───────────────────
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('sandbox', 'allow-same-origin');
+  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:1440px;height:5000px;border:none;pointer-events:none;opacity:0;z-index:-9999;';
+  document.body.appendChild(iframe);
+
+  const iDoc = iframe.contentDocument;
+  iDoc.open();
+  iDoc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}${cssStr}</style></head><body style="margin:0;padding:0;">${htmlStr}</body></html>`);
+  iDoc.close();
+
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  const iWin    = iframe.contentWindow;
+  const bodyEl  = iDoc.body;
+  const bodyRect = bodyEl.getBoundingClientRect();
+
+  // ── 2a. Component mode — locate subtree by data-canvus-id ─────────────────
+  if (isComponent) {
+    const rootDomEl = iDoc.querySelector(`[data-canvus-id="${CSS.escape(targetId)}"]`);
+    if (!rootDomEl) {
+      document.body.removeChild(iframe);
+      notify(`No element with data-canvus-id="${targetId}" found`);
+      return;
+    }
+
+    const compRect = rootDomEl.getBoundingClientRect();
+    const compW    = Math.max(1, Math.round(compRect.width));
+    const compH    = Math.max(1, Math.round(compRect.height));
+    const { x: placeX, y: placeY } = _htmlImportNextToExisting();
+
+    // Build the component master frame
+    const compFrame           = mkEl('frame', placeX, placeY, compW, compH);
+    compFrame.name            = '⬡ ' + targetId;
+    compFrame.isComponent     = true;
+    compFrame.componentId     = null;
+    compFrame.overrides       = {};
+    compFrame.variantProps    = {};
+    compFrame.page            = S.page;
+
+    // Apply the root element's own styles
+    const computed = iWin.getComputedStyle(rootDomEl);
+    const styles   = _htmlExtractStyles(rootDomEl, computed, unsupported);
+    _htmlApplyFrameStyles(compFrame, styles);
+    if (computed.display === 'flex' || computed.display === 'inline-flex') {
+      const isRow = !computed.flexDirection?.startsWith('column');
+      compFrame.autoLayout = {
+        direction: isRow ? 'horizontal' : 'vertical',
+        gap:       Math.round(parseFloat(computed.gap || computed.rowGap || computed.columnGap) || 0),
+        padding:   Math.round(parseFloat(computed.paddingTop) || 0),
+        align:     _htmlMapAlign(computed.alignItems),
+      };
+    }
+    syncLegacyFill(compFrame);
+    newEls.push(compFrame);
+
+    // Walk children of the component root
+    for (const child of rootDomEl.children) {
+      _htmlWalkNode(child, compFrame.id, compRect, iWin, newEls, unsupported);
+    }
+
+    document.body.removeChild(iframe);
+    pushUndo();
+    S.els.push(...newEls);
+    S.selIds = [compFrame.id];
+    renderAll(); updateProps(); updateLayers();
+    zoomToSel();
+    notify(`Imported component "⬡ ${targetId}" — ${newEls.length} element${newEls.length !== 1 ? 's' : ''}`);
+    if (unsupported.length) _htmlImportShowDebug(unsupported);
+    return;
+  }
+
+  // ── 2b. Full-page mode ────────────────────────────────────────────────────
+  const docW = Math.max(390, Math.round(iDoc.documentElement.scrollWidth  || bodyRect.width  || 1440));
+  const docH = Math.max(100, Math.round(iDoc.documentElement.scrollHeight || bodyRect.height || 900));
+  const rootFrame = mkEl('frame', 200, 200, docW, docH);
+  rootFrame.name  = 'Imported Page';
+  rootFrame.fills = [{ ...mkFill('#ffffff'), opacity: 100 }];
+  rootFrame.page  = S.page;
+  newEls.push(rootFrame);
+
+  for (const child of bodyEl.children) {
+    _htmlWalkNode(child, rootFrame.id, bodyRect, iWin, newEls, unsupported);
+  }
+
+  document.body.removeChild(iframe);
+  pushUndo();
+  S.els.push(...newEls);
+  S.selIds = [rootFrame.id];
+  renderAll(); updateProps(); updateLayers();
+  zoomToFit();
+  notify(`Imported ${newEls.length} element${newEls.length !== 1 ? 's' : ''} from HTML`);
+  if (unsupported.length) _htmlImportShowDebug(unsupported);
+}
+
+// Returns a canvas position just to the right of all existing top-level elements
+function _htmlImportNextToExisting() {
+  const pageEls = S.els.filter(e => e.page === S.page && !e.parentId);
+  if (!pageEls.length) return { x: 200, y: 200 };
+  const maxX = Math.max(...pageEls.map(e => e.x + e.w));
+  const minY = Math.min(...pageEls.map(e => e.y));
+  return { x: maxX + 100, y: minY };
+}
+
+// ─── Tag categories ───────────────────────────────────────────────────────────
+const _HTML_FRAME_TAGS  = new Set(['div','section','main','header','footer','nav','aside','article','form','ul','ol','li','figure','fieldset','details','summary','address']);
+const _HTML_TEXT_TAGS   = new Set(['p','span','h1','h2','h3','h4','h5','h6','label','strong','em','small','time','blockquote','cite','code','pre','td','th','caption','dt','dd','legend']);
+const _HTML_BUTTON_TAGS = new Set(['button','a']);
+const _HTML_IMG_TAGS    = new Set(['img','picture']);
+const _HTML_SKIP_TAGS   = new Set(['script','style','head','link','meta','noscript','template','svg','use','defs','path','circle','rect','polygon','br','hr','input','select','textarea','iframe']);
+
+// ─── Recursive DOM walker ─────────────────────────────────────────────────────
+function _htmlWalkNode(domEl, parentId, parentRect, iWin, newEls, unsupported) {
+  const tag = domEl.tagName?.toLowerCase();
+  if (!tag || _HTML_SKIP_TAGS.has(tag)) return;
+
+  const rect = domEl.getBoundingClientRect();
+  const w    = Math.round(rect.width);
+  const h    = Math.round(rect.height);
+  if (w < 1 || h < 1) return;
+
+  // Coordinates relative to parent element's top-left
+  const x = Math.round(rect.left - parentRect.left);
+  const y = Math.round(rect.top  - parentRect.top);
+
+  const computed = iWin.getComputedStyle(domEl);
+  if (computed.display === 'none' || computed.visibility === 'hidden') return;
+
+  const styles   = _htmlExtractStyles(domEl, computed, unsupported);
+  const canvusId = domEl.getAttribute('data-canvus-id');
+  if (!canvusId) console.warn(`[HTML Import] <${tag}${domEl.className ? '.' + domEl.className.trim().split(/\s+/)[0] : ''}> missing data-canvus-id`);
+
+  let el       = null;
+  const extras = []; // button text child etc.
+
+  // ── Map element type ──────────────────────────────────────────────────────
+  if (_HTML_IMG_TAGS.has(tag)) {
+    el           = mkEl('rect', x, y, w, h);
+    el.imageSrc  = domEl.getAttribute('src') || domEl.currentSrc || '';
+    el.fills     = [];
+    el.name      = domEl.getAttribute('alt') || canvusId || 'Image';
+
+  } else if (_HTML_TEXT_TAGS.has(tag)) {
+    const text = domEl.textContent?.trim() || '';
+    if (!text) return; // skip visually empty text containers
+    el           = mkEl('text', x, y, w, h);
+    el.text      = text;
+    el.name      = canvusId || text.slice(0, 40) || tag;
+    el.fills     = [];
+    _htmlApplyTextStyles(el, styles);
+
+  } else if (_HTML_BUTTON_TAGS.has(tag)) {
+    el      = mkEl('frame', x, y, w, h);
+    el.name = canvusId || domEl.textContent?.trim().slice(0, 40) || 'Button';
+    _htmlApplyFrameStyles(el, styles);
+    // Inline text label as a child text node
+    const text = domEl.textContent?.trim() || '';
+    if (text) {
+      const lbl        = mkEl('text', 0, 0, w, h);
+      lbl.text         = text;
+      lbl.name         = el.name + ' Label';
+      lbl.parentId     = el.id;
+      lbl.page         = S.page;
+      lbl.fills        = [];
+      lbl.textAlign    = 'center';
+      _htmlApplyTextStyles(lbl, styles);
+      extras.push(lbl);
+    }
+
+  } else {
+    // Generic frame (div, section, nav, …)
+    el      = mkEl('frame', x, y, w, h);
+    el.name = canvusId || domEl.id || domEl.className?.trim().split(/\s+/)[0] || tag;
+    _htmlApplyFrameStyles(el, styles);
+
+    // Map flexbox → Canvus autoLayout
+    if (computed.display === 'flex' || computed.display === 'inline-flex') {
+      const isRow  = !computed.flexDirection?.startsWith('column');
+      const gap    = parseFloat(computed.gap || computed.rowGap || computed.columnGap) || 0;
+      const pt     = parseFloat(computed.paddingTop)    || 0;
+      const pr     = parseFloat(computed.paddingRight)  || 0;
+      const pb     = parseFloat(computed.paddingBottom) || 0;
+      const pl     = parseFloat(computed.paddingLeft)   || 0;
+      el.autoLayout = {
+        direction: isRow ? 'horizontal' : 'vertical',
+        gap:       Math.round(gap),
+        padding:   Math.round((pt + pr + pb + pl) / 4), // avg for single-value approximation
+        align:     _htmlMapAlign(computed.alignItems),
+      };
+    }
+  }
+
+  if (!el) return;
+  el.parentId = parentId;
+  el.page     = S.page;
+  syncLegacyFill(el);
+
+  newEls.push(el, ...extras);
+
+  // Recurse into children (text/button/img content handled inline above)
+  if (!_HTML_TEXT_TAGS.has(tag) && !_HTML_BUTTON_TAGS.has(tag) && !_HTML_IMG_TAGS.has(tag)) {
+    for (const child of domEl.children) {
+      _htmlWalkNode(child, el.id, rect, iWin, newEls, unsupported);
+    }
+  }
+}
+
+// ─── Style extraction (reads computed styles from browser) ────────────────────
+function _htmlExtractStyles(domEl, c, unsupported) {
+  const s = {
+    bg:          _htmlRgbToHex(c.backgroundColor),
+    bgOpacity:   _htmlRgbaOpacity(c.backgroundColor),
+    rx:          parseFloat(c.borderRadius)  || 0,
+    borderW:     parseFloat(c.borderTopWidth || c.borderWidth) || 0,
+    borderColor: _htmlRgbToHex(c.borderColor),
+    opacity:     Math.round(parseFloat(c.opacity) * 100),
+    fontSize:    parseFloat(c.fontSize)      || 16,
+    fontWeight:  c.fontWeight                || '400',
+    lineHeight:  parseFloat(c.lineHeight)    || 0,
+    textAlign:   c.textAlign                 || 'left',
+    color:       _htmlRgbToHex(c.color)      || '#111111',
+    shadow:      c.boxShadow !== 'none' ? c.boxShadow : null,
+  };
+
+  // Collect unsupported CSS for the debug panel
+  const tag = domEl.tagName?.toLowerCase();
+  const checks = [
+    ['display:grid',       c.display === 'grid' || c.display === 'inline-grid' ? `${tag}: display:${c.display}` : null],
+    ['transform',          c.transform !== 'none' ? `${tag}: ${c.transform.slice(0,40)}` : null],
+    ['filter',             c.filter !== 'none' ? `${tag}: ${c.filter.slice(0,40)}` : null],
+    ['clip-path',          c.clipPath !== 'none' ? `${tag}: ${c.clipPath.slice(0,40)}` : null],
+    ['background-image',   c.backgroundImage !== 'none' ? `${tag}: ${c.backgroundImage.slice(0,50)}` : null],
+    ['position:absolute',  (c.position === 'absolute' || c.position === 'fixed') ? `${tag}: position:${c.position}` : null],
+    ['text-overflow',      c.textOverflow !== 'clip' ? `${tag}: text-overflow:${c.textOverflow}` : null],
+  ];
+  for (const [prop, val] of checks) {
+    if (val) unsupported.push({ prop, val });
+  }
+  return s;
+}
+
+// ─── Apply styles to Canvus frame element ────────────────────────────────────
+function _htmlApplyFrameStyles(el, s) {
+  if (s.bg) {
+    const f     = mkFill(s.bg);
+    f.opacity   = s.bgOpacity;
+    el.fills    = [f];
+  } else {
+    el.fills    = [{ ...mkFill('#ffffff'), opacity: 0 }]; // transparent frame
+  }
+  el.rx      = Math.round(s.rx);
+  el.opacity = s.opacity;
+  if (s.borderW > 0 && s.borderColor) {
+    el.stroke      = s.borderColor;
+    el.strokeWidth = Math.round(s.borderW);
+  } else {
+    el.stroke      = 'none';
+    el.strokeWidth = 0;
+  }
+  if (s.shadow) {
+    const sh = _htmlParseShadow(s.shadow);
+    if (sh) el.effects = [{ type: 'drop-shadow', visible: true, color: sh.color, opacity: sh.opacity, x: sh.x, y: sh.y, blur: sh.blur, spread: sh.spread }];
+  }
+}
+
+// ─── Apply styles to Canvus text element ─────────────────────────────────────
+function _htmlApplyTextStyles(el, s) {
+  el.fontSize   = Math.round(s.fontSize);
+  el.fontWeight = String(s.fontWeight);
+  el.lineHeight = s.lineHeight > 0 ? Math.round(s.lineHeight) : Math.round(s.fontSize * 1.4);
+  el.textAlign  = s.textAlign === 'start' ? 'left' : s.textAlign === 'end' ? 'right' : (s.textAlign || 'left');
+  el.textColor  = s.color || '#111111';
+  el.opacity    = s.opacity;
+}
+
+// ─── Color helpers ────────────────────────────────────────────────────────────
+function _htmlRgbToHex(val) {
+  if (!val || val === 'transparent') return null;
+  const m = val.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
+  if (!m) return null;
+  // Fully transparent → treat as no fill
+  const a = val.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/);
+  if (a && parseFloat(a[1]) === 0) return null;
+  const r = Math.round(parseFloat(m[1]));
+  const g = Math.round(parseFloat(m[2]));
+  const b = Math.round(parseFloat(m[3]));
+  return '#' + [r, g, b].map(n => n.toString(16).padStart(2, '0')).join('');
+}
+
+function _htmlRgbaOpacity(val) {
+  if (!val) return 100;
+  const m = val.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/);
+  return m ? Math.round(parseFloat(m[1]) * 100) : 100;
+}
+
+function _htmlParseShadow(val) {
+  // Take first shadow only, skip inset
+  const first = val.split(/,\s*(?![^()]*\))/)[0].replace(/^\s*inset\s+/, '');
+  const colorM = first.match(/(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8})/);
+  const numsM  = first.replace(/(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8})/g, '').match(/([-\d.]+)px/g);
+  if (!numsM || numsM.length < 2) return null;
+  const nums  = numsM.map(n => parseFloat(n));
+  const color = colorM ? (_htmlRgbToHex(colorM[0]) || '#000000') : '#000000';
+  const aM    = (colorM?.[0] || '').match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/);
+  return { x: nums[0]||0, y: nums[1]||0, blur: nums[2]||8, spread: nums[3]||0, color, opacity: aM ? Math.round(parseFloat(aM[1])*100) : 30 };
+}
+
+function _htmlMapAlign(alignItems) {
+  return { 'flex-start':'start', 'flex-end':'end', 'center':'center', 'stretch':'stretch' }[alignItems] || 'start';
+}
+
+// ─── Debug panel ──────────────────────────────────────────────────────────────
+function _htmlImportShowDebug(unsupported) {
+  let panel = document.getElementById('html-import-debug');
+  if (!panel) { panel = document.createElement('div'); panel.id = 'html-import-debug'; document.body.appendChild(panel); }
+
+  const grouped = {};
+  for (const { prop, val } of unsupported) {
+    (grouped[prop] = grouped[prop] || []).push(val);
+  }
+  const total = Object.keys(grouped).length;
+  panel.innerHTML = `
+    <div class="html-debug-hdr">
+      <span>Import Debug — ${total} unsupported style${total !== 1 ? 's' : ''}</span>
+      <button onclick="this.closest('#html-import-debug').remove()">×</button>
+    </div>
+    <div class="html-debug-body">
+      ${Object.entries(grouped).map(([prop, vals]) => `
+        <div class="html-debug-group">
+          <div class="html-debug-prop">${prop}</div>
+          ${vals.slice(0, 4).map(v => `<div class="html-debug-item">${v.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`).join('')}
+          ${vals.length > 4 ? `<div class="html-debug-item">…+${vals.length - 4} more</div>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
