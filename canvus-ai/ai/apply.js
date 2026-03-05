@@ -20,6 +20,7 @@ function applyOps(ops, { dryRun = false } = {}) {
   const applied = [];
   const skipped = [];
   const diff    = [];
+  const newTopFrameIds = [];
 
   if (!dryRun) pushUndo();
 
@@ -28,6 +29,11 @@ function applyOps(ops, { dryRun = false } = {}) {
       const result = _applyOne(op, dryRun);
       applied.push(op.type);
       diff.push(...result);
+      // Track newly created top-level frames for auto-centering
+      if (!dryRun && op.type === 'create_element' && op.elType === 'frame' && !op.parentId) {
+        const created = S.els[S.els.length - 1];
+        if (created && created.type === 'frame') newTopFrameIds.push(created.id);
+      }
     } catch (err) {
       skipped.push(`${op.type}: ${err.message}`);
     }
@@ -37,6 +43,23 @@ function applyOps(ops, { dryRun = false } = {}) {
     renderAll();
     updateProps();
     updateLayers();
+
+    // Auto-center viewport on the first newly created top-level frame
+    if (newTopFrameIds.length > 0) {
+      const fr = getEl(newTopFrameIds[0]);
+      if (fr) {
+        const wrap = document.getElementById('canvas-wrap');
+        const r = wrap ? wrap.getBoundingClientRect() : { width: window.innerWidth - 280, height: window.innerHeight - 48 };
+        const vw = r.width, vh = r.height;
+        // Fit zoom so the frame fills ~80% of the viewport
+        const fitZoom = Math.min(0.8 * vw / fr.w, 0.8 * vh / fr.h, 2);
+        S.zoom = Math.max(0.1, fitZoom);
+        S.panX = vw / 2 - (fr.x + fr.w / 2) * S.zoom;
+        S.panY = vh / 2 - (fr.y + fr.h / 2) * S.zoom;
+        applyTransform();
+        renderGrid();
+      }
+    }
   }
 
   return { applied, skipped, diff };
