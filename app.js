@@ -5114,30 +5114,19 @@ async function sendAIPrompt() {
       status.textContent = data.error || `Worker error ${res.status}.`;
       btn.disabled = false; btn.textContent = 'Send'; return;
     }
-    if (data.ops?.length) {
-      // Normalize IDs — model may return strings, singular id, or non-array ids.
-      // apply.js uses op.ids[] for most ops, but op.id (singular) for a few.
-      const _SING = new Set(['resize_element','rename_element','reorder_element',
-        'set_auto_layout','remove_auto_layout','add_prototype_connection']);
-      const ops = data.ops.map(op => {
-        const n = {...op};
-        if (_SING.has(n.type)) {
-          // needs singular id
-          if (n.ids != null) { n.id = Number(Array.isArray(n.ids) ? n.ids[0] : n.ids); delete n.ids; }
-          else if (n.id != null) n.id = Number(n.id);
-        } else {
-          // needs ids array
-          if (n.ids != null) n.ids = (Array.isArray(n.ids) ? n.ids : [n.ids]).map(Number);
-          else if (n.id != null) { n.ids = [Number(n.id)]; delete n.id; }
-        }
-        return n;
-      });
-      console.log('[Canvus AI] ops:', JSON.stringify(ops));
-      const result = applyOps(ops);
-      console.log('[Canvus AI] applied:', result.applied, 'skipped:', result.skipped);
+    if (data.code) {
+      console.log('[Canvus AI] code:', data.code);
+      try {
+        pushUndo();
+        // eslint-disable-next-line no-eval
+        eval(data.code);
+      } catch (err) {
+        console.error('[Canvus AI] eval error:', err);
+        status.textContent = `AI error: ${err.message}`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
       input.value = '';
-      const skipNote = result.skipped.length ? ` (${result.skipped.length} skipped — see console)` : '';
-      status.textContent = (data.summary || `Applied ${result.applied.length} change(s).`) + skipNote;
+      status.textContent = data.summary || 'Done.';
     } else {
       status.textContent = data.summary || data.error || 'No changes made.';
     }
