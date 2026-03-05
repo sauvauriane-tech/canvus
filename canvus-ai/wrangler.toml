@@ -2,14 +2,6 @@ name       = "canvus-ai"
 main = "backend/worker.ts"
 compatibility_date = "2024-09-23"
 
-# ── Durable Objects ───────────────────────────────────────────────────────────
-[[durable_objects.bindings]]
-name       = "CANVUS_ROOM"          # env.CANVUS_ROOM in worker.ts
-class_name = "CanvusRoom"           # exported from src/room.ts via worker.ts
-
-[[migrations]]
-tag     = "v1"
-new_classes = ["CanvusRoom"]
 
 # ── Secrets (set via `wrangler secret put MISTRAL_API_KEY`) ───────────────────
 # Do NOT put the real key here; this section documents expected secrets only.
