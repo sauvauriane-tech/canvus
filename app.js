@@ -5115,9 +5115,18 @@ async function sendAIPrompt() {
       btn.disabled = false; btn.textContent = 'Send'; return;
     }
     if (data.ops?.length) {
-      applyOps(data.ops);
+      // Normalize IDs to numbers — Mistral sometimes returns them as strings
+      const ops = data.ops.map(op => ({
+        ...op,
+        ...(op.ids != null ? { ids: op.ids.map(Number) } : {}),
+        ...(op.id  != null ? { id:  Number(op.id)       } : {}),
+      }));
+      console.log('[Canvus AI] ops:', JSON.stringify(ops));
+      const result = applyOps(ops);
+      console.log('[Canvus AI] applied:', result.applied, 'skipped:', result.skipped);
       input.value = '';
-      status.textContent = data.summary || `Applied ${data.ops.length} change(s).`;
+      const skipNote = result.skipped.length ? ` (${result.skipped.length} skipped — see console)` : '';
+      status.textContent = (data.summary || `Applied ${result.applied.length} change(s).`) + skipNote;
     } else {
       status.textContent = data.summary || data.error || 'No changes made.';
     }
