@@ -5121,6 +5121,17 @@ function closeAI() {
   document.getElementById('ai-panel').classList.remove('open');
 }
 
+let _aiMode = 'edit'; // 'edit' | 'generate'
+function setAIMode(mode) {
+  _aiMode = mode;
+  document.getElementById('ai-tab-edit').classList.toggle('active', mode === 'edit');
+  document.getElementById('ai-tab-gen').classList.toggle('active', mode === 'generate');
+  const input = document.getElementById('ai-input');
+  input.placeholder = mode === 'generate'
+    ? 'Describe a page to create… e.g. "landing page with hero and 3 feature cards"'
+    : 'Ask AI to edit your design… (Enter to send)';
+}
+
 async function sendAIPrompt() {
   const input  = document.getElementById('ai-input');
   const status = document.getElementById('ai-status');
@@ -5132,51 +5143,83 @@ async function sendAIPrompt() {
   btn.textContent = '…';
   status.textContent = 'Thinking…';
 
-  const doc = {
-    pageName: S.pages.find(p => p.id === S.page)?.name || 'Page',
-    page: S.page,
-    els: S.els.filter(e => e.page === S.page).map(e => ({
-      id: e.id, type: e.type, name: e.name,
-      x: e.x, y: e.y, w: e.w, h: e.h,
-      ...(e.parentId ? { parentId: e.parentId } : {}),
-      ...(e.text     ? { text: e.text }         : {}),
-    })),
-  };
-
   try {
-    const res = await fetch(_AI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, document: doc, selIds: S.selIds }),
-    });
-    let data;
-    const text = await res.text();
-    try { data = JSON.parse(text); }
-    catch {
-      console.error('[Canvus AI] Non-JSON response', res.status, text.slice(0, 300));
-      status.textContent = `Worker error ${res.status} — see console for details.`;
-      btn.disabled = false; btn.textContent = 'Send'; return;
-    }
-    if (!res.ok) {
-      console.error('[Canvus AI] Worker error', res.status, data);
-      status.textContent = data.error || `Worker error ${res.status}.`;
-      btn.disabled = false; btn.textContent = 'Send'; return;
-    }
-    if (data.code) {
-      console.log('[Canvus AI] code:', data.code);
-      try {
-        pushUndo();
-        // eslint-disable-next-line no-eval
-        eval(data.code);
-      } catch (err) {
-        console.error('[Canvus AI] eval error:', err);
-        status.textContent = `AI error: ${err.message}`;
+    if (_aiMode === 'generate') {
+      // ── Generate mode: create a full document from scratch ──────────────────
+      const res = await fetch(_GENERATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch {
+        status.textContent = `Worker error ${res.status} — see console.`;
         btn.disabled = false; btn.textContent = 'Send'; return;
       }
+      if (!res.ok || data.error) {
+        status.textContent = data?.error || `Worker error ${res.status}.`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      const doc = data.document;
+      if (!doc || !Array.isArray(doc.els)) {
+        status.textContent = 'AI returned an empty document.';
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      pushUndo();
+      S.els         = JSON.parse(JSON.stringify(doc.els        || []));
+      S.pages       = JSON.parse(JSON.stringify(doc.pages      || [{id:1,name:'Page 1'}]));
+      S.page        = doc.page        || S.pages[0]?.id || 1;
+      S.protoConns  = JSON.parse(JSON.stringify(doc.protoConns || []));
+      S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
+      S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
+      S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
+      renderAll(); updateProps(); updateLayers(); updatePages();
       input.value = '';
-      status.textContent = data.summary || 'Done.';
+      status.textContent = data.summary || 'Page generated.';
     } else {
-      status.textContent = data.summary || data.error || 'No changes made.';
+      // ── Edit mode: modify current canvas with JS code ────────────────────────
+      const doc = {
+        pageName: S.pages.find(p => p.id === S.page)?.name || 'Page',
+        page: S.page,
+        els: S.els.filter(e => e.page === S.page).map(e => ({
+          id: e.id, type: e.type, name: e.name,
+          x: e.x, y: e.y, w: e.w, h: e.h,
+          ...(e.parentId ? { parentId: e.parentId } : {}),
+          ...(e.text     ? { text: e.text }         : {}),
+        })),
+      };
+      const res = await fetch(_AI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, document: doc, selIds: S.selIds }),
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch {
+        status.textContent = `Worker error ${res.status} — see console.`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      if (!res.ok) {
+        status.textContent = data.error || `Worker error ${res.status}.`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      if (data.code) {
+        console.log('[Canvus AI] code:', data.code);
+        try {
+          pushUndo();
+          // eslint-disable-next-line no-eval
+          eval(data.code);
+        } catch (err) {
+          console.error('[Canvus AI] eval error:', err);
+          status.textContent = `AI error: ${err.message}`;
+          btn.disabled = false; btn.textContent = 'Send'; return;
+        }
+        input.value = '';
+        status.textContent = data.summary || 'Done.';
+      } else {
+        status.textContent = data.summary || data.error || 'No changes made.';
+      }
     }
   } catch (err) {
     console.error('[Canvus AI] fetch failed:', err);

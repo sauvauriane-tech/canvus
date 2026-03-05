@@ -1019,3 +1019,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 #ai-input::placeholder{color:var(--text3);}
 #ai-footer{display:flex;align-items:center;gap:8px;}
 #ai-status{flex:1;font-size:11px;color:var(--text3);line-height:1.4;}
+#ai-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 10px;}
+.ai-tab{background:none;border:none;border-bottom:2px solid transparent;padding:6px 10px;font-size:11px;color:var(--text3);cursor:pointer;margin-bottom:-1px;}
+.ai-tab.active{color:var(--accent);border-bottom-color:var(--accent);}

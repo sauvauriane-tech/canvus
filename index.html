@@ -385,6 +385,10 @@
     <h3>Canvus AI</h3>
     <button id="ai-close" onclick="closeAI()">×</button>
   </div>
+  <div id="ai-tabs">
+    <button class="ai-tab active" id="ai-tab-edit" onclick="setAIMode('edit')">Edit canvas</button>
+    <button class="ai-tab" id="ai-tab-gen" onclick="setAIMode('generate')">Generate page</button>
+  </div>
   <div id="ai-body">
     <textarea id="ai-input" placeholder="Ask AI to edit your design… (Enter to send)" rows="3"></textarea>
     <div id="ai-footer">
