@@ -124,8 +124,8 @@ export default {
       const { prompt, document: doc, selIds = [] } = body;
       if (!prompt || !doc) return jsonRes({ error: 'Missing prompt or document' }, 400);
 
-      if (!env.MISTRAL_API_KEY) {
-        return jsonRes({ error: 'MISTRAL_API_KEY secret not set on this Worker' }, 500);
+      if (!env.MISTRAL_API_KEY2) {
+        return jsonRes({ error: 'MISTRAL_API_KEY2 secret not set on this Worker' }, 500);
       }
 
       // Call Mistral
@@ -134,7 +134,7 @@ export default {
         mistralRes = await fetch('https://api.mistral.ai/v1/chat/completions', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${env.MISTRAL_API_KEY}`,
+            Authorization: `Bearer ${env.MISTRAL_API_KEY2}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
