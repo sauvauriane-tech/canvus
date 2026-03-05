@@ -5177,6 +5177,8 @@ async function sendAIPrompt() {
       S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
       S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
       S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
+      // Ensure all elements have the correct page field (AI may omit it)
+      S.els.forEach(el => { if (el.page == null) el.page = S.page; });
       renderAll(); updateProps(); updateLayers(); updatePages(); zoomToFit();
       input.value = '';
       status.textContent = data.summary || 'Page generated.';
