@@ -12,7 +12,6 @@
  *   ALLOWED_ORIGIN   — e.g. https://your-canvus-domain.com (or * for dev)
  */
 
-import { validateOps } from '../ai/validate.js';
 import type { DocumentSnapshot } from '../ai/ops.js';
 
 // ─── Cloudflare Worker env ───────────────────────────────────────────────────
@@ -160,13 +159,9 @@ export default {
       return json({ error: 'Failed to parse tool arguments', ops: [] }, 200, origin);
     }
 
-    // Validate ops before sending to client
-    const { valid, errors, ops } = validateOps(args.ops);
-
     return json({
-      ops,
-      summary:         args.summary || '',
-      validationErrors: valid ? undefined : errors,
+      ops:     args.ops || [],
+      summary: args.summary || '',
     }, 200, origin);
   },
 };
