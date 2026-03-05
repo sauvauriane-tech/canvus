@@ -5115,12 +5115,23 @@ async function sendAIPrompt() {
       btn.disabled = false; btn.textContent = 'Send'; return;
     }
     if (data.ops?.length) {
-      // Normalize IDs to numbers — Mistral sometimes returns them as strings
-      const ops = data.ops.map(op => ({
-        ...op,
-        ...(op.ids != null ? { ids: op.ids.map(Number) } : {}),
-        ...(op.id  != null ? { id:  Number(op.id)       } : {}),
-      }));
+      // Normalize IDs — model may return strings, singular id, or non-array ids.
+      // apply.js uses op.ids[] for most ops, but op.id (singular) for a few.
+      const _SING = new Set(['resize_element','rename_element','reorder_element',
+        'set_auto_layout','remove_auto_layout','add_prototype_connection']);
+      const ops = data.ops.map(op => {
+        const n = {...op};
+        if (_SING.has(n.type)) {
+          // needs singular id
+          if (n.ids != null) { n.id = Number(Array.isArray(n.ids) ? n.ids[0] : n.ids); delete n.ids; }
+          else if (n.id != null) n.id = Number(n.id);
+        } else {
+          // needs ids array
+          if (n.ids != null) n.ids = (Array.isArray(n.ids) ? n.ids : [n.ids]).map(Number);
+          else if (n.id != null) { n.ids = [Number(n.id)]; delete n.id; }
+        }
+        return n;
+      });
       console.log('[Canvus AI] ops:', JSON.stringify(ops));
       const result = applyOps(ops);
       console.log('[Canvus AI] applied:', result.applied, 'skipped:', result.skipped);

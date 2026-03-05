@@ -1,8 +1,8 @@
 /**
  * worker.ts — Canvus AI Cloudflare Worker
  *
- * Sends the user's prompt + document context to Mistral and returns
- * a plain-text confirmation of what was understood / will be done.
+ * Proxies prompts to Mistral, validates the returned ops, and sends
+ * them back to the Canvus client.
  *
  * Deploy:
  *   wrangler deploy
@@ -20,13 +20,63 @@ interface Env {
   ALLOWED_ORIGIN:  string;
 }
 
+// ─── Mistral tool definitions ─────────────────────────────────────────────────
+const TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'apply_ops',
+      description: 'Apply a sequence of design operations to the Canvus document. Return ALL changes as a single call.',
+      parameters: {
+        type: 'object',
+        required: ['ops'],
+        properties: {
+          ops: {
+            type: 'array',
+            description: 'Ordered list of ops to apply. Use a batch op if you need atomic grouping.',
+            items: { type: 'object' },
+          },
+          summary: {
+            type: 'string',
+            description: 'One-sentence plain-English summary of what will change, shown to the user.',
+          },
+        },
+      },
+    },
+  },
+];
+
 // ─── System prompt ────────────────────────────────────────────────────────────
 function buildSystemPrompt(): string {
-  return `You are Canvus AI, a design assistant embedded in a Figma-like design tool.
-The user will describe a design change they want to make.
-Reply with a single short sentence confirming what you understood and what you would do.
-Example: "Got it — I'll change the rectangle fill to red."
-Be concise. Do not ask questions. Do not explain. Just confirm the action.`;
+  return `You are Canvus AI, an expert design assistant embedded in a Figma-like design tool called Canvus.
+
+Your job is to interpret the user's design intent and express it as a list of typed ops that Canvus understands.
+
+DOCUMENT MODEL
+- Elements have: id (integer), type (rect/ellipse/frame/text/line/group), name, x, y, w, h
+- Positions are in canvas pixels (8pt grid). Snap to 8px increments when possible.
+- Fills: array of { type:'solid'|'linear'|'radial', color:'#hex', opacity:0-100, blend }
+- Effects: drop-shadow, inner-shadow, layer-blur, bg-blur, noise, glass, texture
+
+AVAILABLE OPS (use exact field names — ids is always an array)
+- set_fill:        { type:'set_fill', ids:[int,...], color:'#hex', opacity?:0-100 }
+- add_fill:        { type:'add_fill', ids:[int,...], color:'#hex' }
+- set_property:    { type:'set_property', ids:[int,...], key:string, value:any }
+- delete_elements: { type:'delete_elements', ids:[int,...] }
+- move_elements:   { type:'move_elements', ids:[int,...], dx:number, dy:number }
+- align_elements:  { type:'align_elements', ids:[int,...], direction:'left'|'right'|'top'|'bottom'|'center-h'|'center-v' }
+- rename_element:  { type:'rename_element', id:int, name:string }
+- resize_element:  { type:'resize_element', id:int, w?:number, h?:number, x?:number, y?:number }
+- batch:           { type:'batch', ops:[...] }
+
+RULES
+1. ALWAYS call apply_ops — never reply with plain text only.
+2. ids is always an integer ARRAY e.g. ids:[5] not ids:5. rename/resize use singular id.
+3. For color changes ALWAYS use set_fill with hex color e.g. color:"#ff0000" not color:"red".
+4. Use the exact numeric id values shown in the document — never invent ids.
+5. If user says "brand purple" use #7c6aee.
+6. Keep changes minimal — don't modify unrelated elements.
+7. Include a clear one-sentence summary.`;
 }
 
 // ─── Request → Mistral → Response ─────────────────────────────────────────────
@@ -79,8 +129,10 @@ export default {
             { role: 'system', content: buildSystemPrompt() },
             { role: 'user',   content: userMessage },
           ],
+          tools:       TOOLS,
+          tool_choice: 'any',
           temperature: 0.2,
-          max_tokens:  128,
+          max_tokens:  4096,
         }),
       });
     } catch (err) {
@@ -93,9 +145,30 @@ export default {
     }
 
     const mistralData = await mistralRes.json() as any;
-    const reply = mistralData.choices?.[0]?.message?.content || 'Done.';
+    const message = mistralData.choices?.[0]?.message;
 
-    return json({ ops: [], summary: reply }, 200, origin);
+    if (!message?.tool_calls?.length) {
+      return json({
+        ops:     [],
+        summary: message?.content || 'No changes suggested.',
+      }, 200, origin);
+    }
+
+    // Extract ops from the apply_ops tool call
+    const toolCall = message.tool_calls.find((tc: any) => tc.function?.name === 'apply_ops');
+    if (!toolCall) return json({ error: 'No apply_ops call in response', ops: [] }, 200, origin);
+
+    let args: { ops: unknown[]; summary?: string };
+    try {
+      args = JSON.parse(toolCall.function.arguments);
+    } catch {
+      return json({ error: 'Failed to parse tool arguments', ops: [] }, 200, origin);
+    }
+
+    return json({
+      ops:     args.ops || [],
+      summary: args.summary || '',
+    }, 200, origin);
   },
 };
 
@@ -106,10 +179,11 @@ function buildDocSummary(doc: DocumentSnapshot, selIds: number[]): string {
     : 'No selection.\n';
 
   const elLines = doc.els.slice(0, 80).map(e =>
-    `  id:${e.id} type:${e.type} name:"${e.name}"${e.text ? ` text:"${e.text.slice(0,40)}"` : ''}`
+    `  id:${e.id} type:${e.type} name:"${e.name}" x:${e.x} y:${e.y} w:${e.w} h:${e.h}${e.parentId ? ` parent:${e.parentId}` : ''}${e.text ? ` text:"${e.text.slice(0,40)}"` : ''}`
   ).join('\n');
 
-  return `PAGE: ${doc.pageName}\n${sel}ELEMENTS:\n${elLines}`;
+  return `PAGE: ${doc.pageName} (id:${doc.page})
+${sel}ELEMENTS (${doc.els.length} total${doc.els.length > 80 ? ', showing first 80' : ''}):\n${elLines}`;
 }
 
 function json(data: object, status = 200, origin = '*'): Response {
