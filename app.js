@@ -5177,7 +5177,7 @@ async function sendAIPrompt() {
       S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
       S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
       S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
-      renderAll(); updateProps(); updateLayers(); updatePages();
+      renderAll(); updateProps(); updateLayers(); updatePages(); zoomToFit();
       input.value = '';
       status.textContent = data.summary || 'Page generated.';
     } else {
