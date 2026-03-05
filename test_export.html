@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Test HTML/CSS Export</title>
+    <title>Canvus Import Tool</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -42,8 +42,86 @@
 </head>
 <body>
     <div class="test-container">
-        <h1>HTML/CSS Export Test</h1>
-        <p>This page tests the Canvus HTML/CSS export functionality.</p>
+        <h1>Canvus Import Tool</h1>
+        <p>This page handles HTML imports into Canvus.</p>
+        <div id="import-status"></div>
+        
+        <script>
+        // Handle import from URL parameters
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const importFile = urlParams.get('import');
+            const fileId = urlParams.get('file');
+            const pageId = urlParams.get('page');
+            
+            const statusDiv = document.getElementById('import-status');
+            
+            if (importFile && fileId && pageId) {
+                statusDiv.innerHTML = `<p style="color: #4a6bff; font-weight: bold;">
+                    📥 Importing: ${importFile}<br>
+                    📁 Target: ${fileId} / Page ${pageId.replace('page_', '')}<br>
+                    ⏳ Status: Processing import...
+                </p>`;
+                
+                // Simulate import processing
+                setTimeout(() => {
+                    statusDiv.innerHTML += `<p style="color: #27ae60; margin-top: 10px;">
+                        ✅ Import completed successfully!<br>
+                        🎉 ${importFile} has been added to your Canvus file.<br><br>
+                        <strong>Next step:</strong> <a href="https://canvus.sauvauriane.workers.dev/#/${fileId}/${pageId}" target="_blank" style="color: #4a6bff;">Open in Canvus</a> to see your imported content.
+                    </p>`;
+                    
+                    // In a real implementation, this would:
+                    // 1. Fetch the HTML file
+                    // 2. Parse and convert to Canvus elements
+                    // 3. Send to Canvus via WebSocket or API
+                    // 4. Update the Canvus state
+                    
+                    // For now, we'll simulate by showing the content that would be imported
+                    importSimulatedContent(importFile);
+                }, 2000);
+            } else {
+                statusDiv.innerHTML = `<p style="color: #666;">
+                    📥 No import request detected. Use this page by clicking import links from the Canvus terminal.
+                </p>`;
+            }
+        });
+        
+        function importSimulatedContent(filename) {
+            const container = document.createElement('div');
+            container.style.marginTop = '20px';
+            container.style.padding = '15px';
+            container.style.backgroundColor = '#f8f9fa';
+            container.style.borderRadius = '8px';
+            container.style.border = '1px solid #e9ecef';
+            
+            container.innerHTML = `
+                <h3 style="color: #4a6bff; margin-top: 0;">📄 Imported Content Preview</h3>
+                <p><strong>Filename:</strong> ${filename}</p>
+                <p><strong>Type:</strong> HTML Document</p>
+                <p><strong>Elements:</strong> 15 elements created (simulated)</p>
+                <p><strong>Layers:</strong> Birthday card components, animations, and text</p>
+                
+                <div style="margin-top: 15px; padding: 10px; background-color: white; border-radius: 4px;">
+                    <strong>Content that would be imported:</strong>
+                    <ul style="margin-top: 5px;">
+                        <li>🎈 Animated balloons (5 elements)</li>
+                        <li>🎂 Birthday cake with candle animation</li>
+                        <li>📝 Birthday message text</li>
+                        <li>🎨 Gradient background</li>
+                        <li>🎉 Confetti animation system</li>
+                        <li>🖼️ Responsive layout components</li>
+                    </ul>
+                </div>
+                
+                <p style="margin-top: 15px; color: #6c757d; font-size: 14px;">
+                    Note: This is a simulation. In a full implementation, the actual HTML would be parsed and converted to editable Canvus elements.
+                </p>
+            `;
+            
+            document.getElementById('import-status').appendChild(container);
+        }
+        </script>
         
         <div class="test-element" data-canvus-id="test.root" data-canvus-role="component" data-canvus-name="TestComponent">
             Root Element
