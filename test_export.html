@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test HTML/CSS Export</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-element {
+            background-color: #4a6bff;
+            color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            position: relative;
+        }
+        .test-element[data-canvus-id="test.child"] {
+            background-color: #00cec9;
+            margin-left: 20px;
+        }
+        pre {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .success {
+            color: #27ae60;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>HTML/CSS Export Test</h1>
+        <p>This page tests the Canvus HTML/CSS export functionality.</p>
+        
+        <div class="test-element" data-canvus-id="test.root" data-canvus-role="component" data-canvus-name="TestComponent">
+            Root Element
+            <div class="test-element" data-canvus-id="test.child" data-canvus-name="ChildElement">
+                Child Element
+            </div>
+        </div>
+        
+        <h2>Test Results</h2>
+        <div id="results"></div>
+        
+        <h2>Patch Application Test</h2>
+        <button onclick="testPatchApplication()">Test Patch Application</button>
+        <div id="patch-results"></div>
+        
+        <script>
+            // Test that data-canvus-id attributes are preserved
+            function testDataCanvusIdPreservation() {
+                const root = document.querySelector('[data-canvus-id="test.root"]');
+                const child = document.querySelector('[data-canvus-id="test.child"]');
+                
+                const resultsDiv = document.getElementById('results');
+                
+                if (root && child) {
+                    resultsDiv.innerHTML += '<p class="success">✓ data-canvus-id attributes preserved correctly</p>';
+                    resultsDiv.innerHTML += '<p>Root element ID: ' + root.getAttribute('data-canvus-id') + '</p>';
+                    resultsDiv.innerHTML += '<p>Child element ID: ' + child.getAttribute('data-canvus-id') + '</p>';
+                } else {
+                    resultsDiv.innerHTML += '<p>✗ data-canvus-id attributes not found</p>';
+                }
+            }
+            
+            function testPatchApplication() {
+                const patchResults = document.getElementById('patch-results');
+                patchResults.innerHTML = '<p>Patch application would work here...</p>';
+                
+                // This would be where the applyCanvusPatch function would be called
+                // with the patch data from Canvus
+            }
+            
+            // Run tests on page load
+            window.onload = function() {
+                testDataCanvusIdPreservation();
+            };
+        </script>
+    </div>
+</body>
+</html>

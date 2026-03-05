@@ -42,14 +42,41 @@ const S = {
   let sid = localStorage.getItem('canvus_session');
   if (!sid) { sid = 'sess_'+Math.random().toString(36).slice(2,9); localStorage.setItem('canvus_session', sid); }
   S.collab.sessionId = sid;
-  // Share ID: derived from URL hash if present, otherwise generate
+  
+  // Parse new URL format: #/file_<fileId>/page_<pageId>
   let shareId = location.hash.slice(1);
-  if (!shareId) {
-    shareId = localStorage.getItem('canvus_share') || ('file_'+Math.random().toString(36).slice(2,10));
-    localStorage.setItem('canvus_share', shareId);
-    history.replaceState(null,'','#'+shareId);
+  let pageId = null;
+  
+  // Check if URL is in new format
+  const urlParts = shareId.split('/');
+  if (urlParts.length >= 3 && urlParts[0] === '' && urlParts[1]?.startsWith('file_') && urlParts[2]?.startsWith('page_')) {
+    shareId = urlParts[1];
+    pageId = urlParts[2].replace('page_', '');
+  } else {
+    // Legacy format: #file_<fileId>
+    if (!shareId) {
+      shareId = localStorage.getItem('canvus_share') || ('file_'+Math.random().toString(36).slice(2,10));
+      localStorage.setItem('canvus_share', shareId);
+    }
   }
+  
   S.collab.shareId = shareId;
+  
+  // Store fileId for reference
+  S.fileId = shareId.replace('file_', '');
+  
+  // If pageId was specified in URL, try to set it
+  if (pageId) {
+    setTimeout(() => {
+      const pageExists = S.pages.some(p => p.id == pageId);
+      if (pageExists) {
+        S.page = parseInt(pageId) || S.page;
+        updatePages();
+        renderAll();
+        updateProps();
+      }
+    }, 100);
+  }
 })();
 
 // ── DOM refs ──
@@ -3501,6 +3528,13 @@ function updateProps() {
           <button class="btn" style="font-size:11px;padding:5px;" onclick="exportElement(${el.id},S._exportScale,S._exportFmt)">↓ Export</button>
         </div>
       </div>
+      <div class="psec" style="margin-top: 10px;">
+        <div class="psec-title">HTML/CSS Export</div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <button class="btn" style="font-size:11px;padding:5px;" onclick="exportToHTMLCSS(${el.id}, 'full')">↓ Full HTML/CSS</button>
+          <button class="btn" style="font-size:11px;padding:5px;" onclick="exportToHTMLCSS(${el.id}, 'patch')">↓ Patch Mode</button>
+        </div>
+      </div>
     `);
   }
 
@@ -3721,6 +3755,268 @@ async function exportElement(elId, scale, format) {
     a.download = `${safeName}@${scale}x.png`;
     a.click(); URL.revokeObjectURL(a.href);
   }, 'image/png');
+}
+
+// EXPORT TO HTML/CSS
+// ════════════════════════════════════════════════════════════
+async function exportToHTMLCSS(elId, mode = 'full') {
+  const rootEl = getEl(elId);
+  if (!rootEl) return;
+  
+  // Collect all descendants
+  function getDescendants(pid) {
+    const ch = S.els.filter(e => e.parentId === pid && e.visible && e.page === S.page);
+    let all = [];
+    ch.forEach(c => { all.push(c); all = all.concat(getDescendants(c.id)); });
+    return all;
+  }
+  const children = getDescendants(rootEl.id);
+  const allElements = [rootEl, ...children];
+  
+  let result;
+  if (mode === 'full') {
+    result = generateFullHTMLCSS(allElements, rootEl);
+    
+    // Create download for full HTML
+    const htmlBlob = new Blob([result.html], {type: 'text/html'});
+    const htmlUrl = URL.createObjectURL(htmlBlob);
+    
+    const a = document.createElement('a');
+    a.href = htmlUrl;
+    a.download = `${rootEl.name || 'export'}.html`;
+    a.click();
+    URL.revokeObjectURL(htmlUrl);
+    
+    // Also provide CSS download
+    const cssBlob = new Blob([result.css], {type: 'text/css'});
+    const cssUrl = URL.createObjectURL(cssBlob);
+    
+    const cssA = document.createElement('a');
+    cssA.href = cssUrl;
+    cssA.download = `${rootEl.name || 'export'}.css`;
+    setTimeout(() => { cssA.click(); URL.revokeObjectURL(cssUrl); }, 100);
+    
+  } else if (mode === 'patch') {
+    result = generatePatchHTMLCSS(allElements, rootEl);
+    
+    // Create download for patch JSON
+    const patchBlob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
+    const patchUrl = URL.createObjectURL(patchBlob);
+    
+    const a = document.createElement('a');
+    a.href = patchUrl;
+    a.download = `${rootEl.name || 'export'}-patch.json`;
+    a.click();
+    URL.revokeObjectURL(patchUrl);
+  }
+  
+  return result;
+}
+
+function generateFullHTMLCSS(elements, rootEl) {
+  const htmlParts = [];
+  const cssParts = [];
+  
+  // Generate CSS variables
+  cssParts.push(`:root {
+    --bg: #f5f7fa;
+    --text: #333;
+    --text-light: #777;
+    --primary: #4a6bff;
+    --secondary: #6c5ce7;
+    --success: #00cec9;
+    --warning: #fdcb6e;
+    --danger: #e17055;
+    --radius: 8px;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --space-1: 8px;
+    --space-2: 16px;
+    --space-3: 24px;
+    --space-4: 32px;
+    --space-5: 48px;
+  }`);
+  
+  // Generate CSS for each element
+  elements.forEach(el => {
+    const cssSelector = `[data-canvus-id="${el.id}"]`;
+    const styles = [];
+    
+    // Position and size
+    if (el.x !== undefined && el.y !== undefined) {
+      styles.push(`position: absolute;`);
+      styles.push(`left: ${el.x}px;`);
+      styles.push(`top: ${el.y}px;`);
+    }
+    if (el.w !== undefined) styles.push(`width: ${el.w}px;`);
+    if (el.h !== undefined) styles.push(`height: ${el.h}px;`);
+    
+    // Background
+    if (el.fills && el.fills[0]) {
+      const fill = el.fills[0];
+      if (fill.visible !== false && fill.color) {
+        const opacity = fill.opacity !== undefined ? fill.opacity / 100 : 1;
+        styles.push(`background-color: ${hexToRGBA(fill.color, opacity)};`);
+      }
+    }
+    
+    // Border radius
+    if (el.rx) styles.push(`border-radius: ${el.rx}px;`);
+    if (el.cornerRadii) {
+      styles.push(`border-radius: ${el.cornerRadii.tl}px ${el.cornerRadii.tr}px ${el.cornerRadii.br}px ${el.cornerRadii.bl}px;`);
+    }
+    
+    // Border
+    if (el.stroke) {
+      styles.push(`border: 1px solid ${el.stroke};`);
+      if (el.strokeWidth) styles.push(`border-width: ${el.strokeWidth}px;`);
+    }
+    
+    // Text styles
+    if (el.type === 'text') {
+      if (el.fontSize) styles.push(`font-size: ${el.fontSize}px;`);
+      if (el.fontWeight) styles.push(`font-weight: ${el.fontWeight};`);
+      if (el.textColor) styles.push(`color: ${el.textColor};`);
+      if (el.textAlign) styles.push(`text-align: ${el.textAlign};`);
+    }
+    
+    // Flexbox
+    if (el.autoLayout) {
+      const layout = el.autoLayout;
+      if (layout.direction === 'horizontal') {
+        styles.push(`display: flex;`);
+        styles.push(`flex-direction: row;`);
+      } else if (layout.direction === 'vertical') {
+        styles.push(`display: flex;`);
+        styles.push(`flex-direction: column;`);
+      }
+      if (layout.gap !== undefined) styles.push(`gap: ${layout.gap}px;`);
+      if (layout.padding !== undefined) styles.push(`padding: ${layout.padding}px;`);
+      if (layout.align) {
+        const alignMap = {
+          'min': 'flex-start',
+          'center': 'center',
+          'max': 'flex-end',
+          'stretch': 'stretch'
+        };
+        styles.push(`align-items: ${alignMap[layout.align] || 'stretch'};`);
+      }
+    }
+    
+    if (styles.length > 0) {
+      cssParts.push(`${cssSelector} { ${styles.join(' ')} }`);
+    }
+  });
+  
+  // Generate HTML structure
+  const elementMap = {};
+  elements.forEach(el => {
+    elementMap[el.id] = el;
+  });
+  
+  function buildHTMLElement(el) {
+    const children = elements.filter(e => e.parentId === el.id);
+    const childHTML = children.map(buildHTMLElement).join('');
+    
+    const attributes = [`data-canvus-id="${el.id}"`];
+    if (el.name) attributes.push(`data-canvus-name="${escHtml(el.name)}"`);
+    if (el.type === 'frame') attributes.push(`data-canvus-role="component"`);
+    
+    let content = '';
+    if (el.type === 'text') {
+      content = escHtml(el.text || '');
+    }
+    
+    return `<${el.type === 'frame' ? 'div' : el.type} ${attributes.join(' ')}>${content}${childHTML}</${el.type === 'frame' ? 'div' : el.type}>`;
+  }
+  
+  htmlParts.push(buildHTMLElement(rootEl));
+  
+  return {
+    html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${rootEl.name || 'Exported Design'}</title>
+    <style>
+${cssParts.join('\n')}
+    </style>
+</head>
+<body>
+${htmlParts.join('')}
+</body>
+</html>`,
+    css: cssParts.join('\n')
+  };
+}
+
+function generatePatchHTMLCSS(elements, rootEl) {
+  const patches = [];
+  
+  elements.forEach(el => {
+    const cssSelector = `[data-canvus-id="${el.id}"]`;
+    const styleChanges = [];
+    const attributeChanges = [];
+    
+    // Check what has changed (in a real implementation, this would compare to original state)
+    // For now, we'll generate patches for all style properties
+    
+    if (el.fills && el.fills[0] && el.fills[0].color) {
+      const fill = el.fills[0];
+      const opacity = fill.opacity !== undefined ? fill.opacity / 100 : 1;
+      styleChanges.push(`background-color: ${hexToRGBA(fill.color, opacity)};`);
+    }
+    
+    if (el.textColor) {
+      styleChanges.push(`color: ${el.textColor};`);
+    }
+    
+    if (el.text && el.type === 'text') {
+      attributeChanges.push(`data-text-content="${escHtml(el.text)}"`);
+    }
+    
+    if (styleChanges.length > 0) {
+      patches.push({
+        type: 'style',
+        selector: cssSelector,
+        changes: styleChanges.join(' ')
+      });
+    }
+    
+    if (attributeChanges.length > 0) {
+      patches.push({
+        type: 'attribute',
+        selector: cssSelector,
+        changes: attributeChanges.join(' ')
+      });
+    }
+  });
+  
+  return {
+    patches: patches,
+    applyPatch: `function applyCanvusPatch(patches) {
+  patches.forEach(patch => {
+    if (patch.type === 'style') {
+      const elements = document.querySelectorAll(patch.selector);
+      elements.forEach(el => {
+        el.style.cssText += ' ' + patch.changes;
+      });
+    } else if (patch.type === 'attribute') {
+      const elements = document.querySelectorAll(patch.selector);
+      // In a real implementation, you would parse and apply attribute changes
+      // This is a simplified version
+    }
+  });
+}`
+  };
+}
+
+// Helper function to convert hex to RGBA
+function hexToRGBA(hex, alpha = 1) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function toggleCornerRadii(elId) {
@@ -4096,12 +4392,45 @@ function startLayerRename(span, el) {
 // ════════════════════════════════════════════════════════════
 // PAGES PANEL
 // ════════════════════════════════════════════════════════════
+function updatePageInfoDisplay(page) {
+  const pageIdDisplay = document.getElementById('page-id-display');
+  if (pageIdDisplay) {
+    pageIdDisplay.textContent = `Page: ${page.id} (${page.name})`;
+  }
+}
+
+function copyPageUrl() {
+  const currentPage = S.pages.find(p => p.id === S.page);
+  if (!currentPage) return;
+  
+  const pageUrl = `${window.location.origin}${window.location.pathname}#/file_${S.fileId}/page_${currentPage.id}`;
+  
+  navigator.clipboard.writeText(pageUrl).then(() => {
+    const copyIcon = document.getElementById('copy-icon');
+    if (copyIcon) {
+      copyIcon.textContent = '✓';
+      setTimeout(() => {
+        copyIcon.textContent = '📋';
+      }, 2000);
+    }
+    notify(`Copied page URL: ${pageUrl}`);
+  }).catch(err => {
+    console.error('Failed to copy page URL: ', err);
+    notify('Failed to copy page URL');
+  });
+}
+
 function updatePages() {
   const list=document.getElementById('pages-list'); list.innerHTML='';
   S.pages.forEach(p=>{
     const item=document.createElement('div'); item.className='pg-item'+(p.id===S.page?' on':'');
     const dot=document.createElement('div'); dot.className='pg-dot';
     const nameSpan=document.createElement('span'); nameSpan.className='pg-name'; nameSpan.textContent=p.name;
+    
+    // Update page info display in topbar
+    if (p.id === S.page) {
+      updatePageInfoDisplay(p);
+    }
     item.appendChild(dot); item.appendChild(nameSpan);
     // Click = switch page
     item.addEventListener('click', ev=>{
@@ -4109,6 +4438,11 @@ function updatePages() {
       if (ev.detail > 1) return;          // don't rerender on double-click
       if (p.id === S.page) return;         // clicking active page does nothing
       S.page = p.id; S.selIds = [];
+      
+      // Update URL with new page format
+      const newUrl = `#/file_${S.collab.shareId.replace('file_', '')}/page_${p.id}`;
+      history.pushState(null, '', newUrl);
+      
       updatePages(); renderAll(); updateProps();
     });
     // Double-click name = rename inline
@@ -4912,12 +5246,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
     S.nextId     = Math.max(_f.nextId||1,...(S.els.map(e=>e.id||0).concat([0])))+1;
     document.getElementById('file-name').value = _f.name;
     updatePages(); renderAll(); updateProps(); updateLayers();
+    
+    // Initialize page info display
+    const currentPage = S.pages.find(p => p.id === S.page);
+    if (currentPage) {
+      updatePageInfoDisplay(currentPage);
+    }
+    
     setTimeout(()=>notify('Welcome back ✦ '+_f.name), 400);
     return;
   }
 
   // No saved files — seed the Welcome demo
   updatePages();
+  
+  // Initialize page info display
+  const currentPage = S.pages.find(p => p.id === S.page);
+  if (currentPage) {
+    updatePageInfoDisplay(currentPage);
+  }
 
  // --- Seed: Welcome demo ---
 

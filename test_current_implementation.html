@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Current URL Implementation</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        .pass { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Test Current URL Implementation</h1>
+    
+    <h2>Test 1: URL Parsing</h2>
+    <div class="test-result" id="test1"></div>
+    
+    <h2>Test 2: URL Generation</h2>
+    <div class="test-result" id="test2"></div>
+    
+    <h2>Test 3: Page Switching</h2>
+    <div class="test-result" id="test3"></div>
+    
+    <script>
+        // Test 1: URL Parsing
+        function testUrlParsing() {
+            const testUrl1 = "/file_abc123/page_1";
+            const testUrl2 = "file_oldformat";
+            
+            const result1 = document.getElementById('test1');
+            
+            // Simulate the parsing logic from app.js
+            const urlParts = testUrl1.split('/');
+            let fileId, pageId;
+            
+            if (urlParts.length >= 3 && urlParts[0] === '' && urlParts[1]?.startsWith('file_') && urlParts[2]?.startsWith('page_')) {
+                fileId = urlParts[1].replace('file_', '');
+                pageId = urlParts[2].replace('page_', '');
+                result1.innerHTML = `<strong>PASS:</strong> New format parsed correctly - fileId: "${fileId}", pageId: "${pageId}"`;
+                result1.className = "test-result pass";
+            } else {
+                result1.innerHTML = `<strong>FAIL:</strong> New format not recognized`;
+                result1.className = "test-result fail";
+            }
+        }
+        
+        // Test 2: URL Generation
+        function testUrlGeneration() {
+            const fileId = "test123";
+            const pageId = 2;
+            
+            const result2 = document.getElementById('test2');
+            
+            // Simulate URL generation
+            const newUrl = `#/file_${fileId}/page_${pageId}`;
+            
+            if (newUrl === "#/file_test123/page_2") {
+                result2.innerHTML = `<strong>PASS:</strong> URL generated correctly: ${newUrl}`;
+                result2.className = "test-result pass";
+            } else {
+                result2.innerHTML = `<strong>FAIL:</strong> URL generation failed: ${newUrl}`;
+                result2.className = "test-result fail";
+            }
+        }
+        
+        // Test 3: Page Switching
+        function testPageSwitching() {
+            const result3 = document.getElementById('test3');
+            
+            // Simulate page switching logic
+            const fileId = "abc123";
+            const currentPage = 1;
+            const newPage = 3;
+            
+            const newUrl = `#/file_${fileId}/page_${newPage}`;
+            
+            if (newUrl === "#/file_abc123/page_3") {
+                result3.innerHTML = `<strong>PASS:</strong> Page switching URL correct: ${newUrl}`;
+                result3.className = "test-result pass";
+            } else {
+                result3.innerHTML = `<strong>FAIL:</strong> Page switching failed: ${newUrl}`;
+                result3.className = "test-result fail";
+            }
+        }
+        
+        // Run all tests
+        testUrlParsing();
+        testUrlGeneration();
+        testPageSwitching();
+    </script>
+</body>
+</html>

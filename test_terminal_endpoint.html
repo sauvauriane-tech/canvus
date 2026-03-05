@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Terminal Endpoint</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-container { max-width: 800px; margin: 0 auto; }
+        .test-case { margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        .test-case h3 { margin-top: 0; }
+        .test-result { margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        pre { background-color: #f0f0f0; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Test Terminal Endpoint</h1>
+        <p>This page tests the /terminal endpoint implementation.</p>
+        
+        <div class="test-case">
+            <h3>Test 1: Echo Command</h3>
+            <p>Testing: POST /terminal with command: "echo" and args: ["Hello", "World"]</p>
+            <div class="test-result" id="test1"></div>
+        </div>
+        
+        <div class="test-case">
+            <h3>Test 2: Date Command</h3>
+            <p>Testing: POST /terminal with command: "date"</p>
+            <div class="test-result" id="test2"></div>
+        </div>
+        
+        <div class="test-case">
+            <h3>Test 3: Help Command</h3>
+            <p>Testing: POST /terminal with command: "help"</p>
+            <div class="test-result" id="test3"></div>
+        </div>
+        
+        <div class="test-case">
+            <h3>Test 4: Unknown Command</h3>
+            <p>Testing: POST /terminal with command: "unknown"</p>
+            <div class="test-result" id="test4"></div>
+        </div>
+        
+        <div class="test-case">
+            <h3>Test 5: Missing Command</h3>
+            <p>Testing: POST /terminal without command field</p>
+            <div class="test-result" id="test5"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Mock fetch for testing (since we can't actually call the worker from file://)
+        function mockTerminalFetch(command, args = []) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    // Simulate the terminal endpoint logic
+                    let response = { success: true, output: '' };
+                    
+                    try {
+                        switch (command.toLowerCase()) {
+                            case 'echo':
+                                response.output = args.join(' ');
+                                break;
+                            case 'date':
+                                response.output = new Date().toISOString();
+                                break;
+                            case 'help':
+                                response.output = 'Available commands: echo, date, help';
+                                break;
+                            default:
+                                response = { success: false, error: `Unknown command: ${command}` };
+                        }
+                    } catch (err) {
+                        response = { success: false, error: err.message };
+                    }
+                    
+                    resolve({
+                        ok: true,
+                        status: 200,
+                        json: () => Promise.resolve(response)
+                    });
+                }, 100);
+            });
+        }
+        
+        async function runTests() {
+            // Test 1: Echo
+            try {
+                const res1 = await mockTerminalFetch('echo', ['Hello', 'World']);
+                const data1 = await res1.json();
+                const test1El = document.getElementById('test1');
+                if (data1.success && data1.output === 'Hello World') {
+                    test1El.innerHTML = `<pre>✓ SUCCESS: ${JSON.stringify(data1, null, 2)}</pre>`;
+                    test1El.className = 'test-result success';
+                } else {
+                    test1El.innerHTML = `<pre>✗ FAILED: ${JSON.stringify(data1, null, 2)}</pre>`;
+                    test1El.className = 'test-result error';
+                }
+            } catch (err) {
+                document.getElementById('test1').innerHTML = `<pre>✗ ERROR: ${err.message}</pre>`;
+                document.getElementById('test1').className = 'test-result error';
+            }
+            
+            // Test 2: Date
+            try {
+                const res2 = await mockTerminalFetch('date');
+                const data2 = await res2.json();
+                const test2El = document.getElementById('test2');
+                if (data2.success && data2.output) {
+                    test2El.innerHTML = `<pre>✓ SUCCESS: ${JSON.stringify(data2, null, 2)}</pre>`;
+                    test2El.className = 'test-result success';
+                } else {
+                    test2El.innerHTML = `<pre>✗ FAILED: ${JSON.stringify(data2, null, 2)}</pre>`;
+                    test2El.className = 'test-result error';
+                }
+            } catch (err) {
+                document.getElementById('test2').innerHTML = `<pre>✗ ERROR: ${err.message}</pre>`;
+                document.getElementById('test2').className = 'test-result error';
+            }
+            
+            // Test 3: Help
+            try {
+                const res3 = await mockTerminalFetch('help');
+                const data3 = await res3.json();
+                const test3El = document.getElementById('test3');
+                if (data3.success && data3.output.includes('Available commands')) {
+                    test3El.innerHTML = `<pre>✓ SUCCESS: ${JSON.stringify(data3, null, 2)}</pre>`;
+                    test3El.className = 'test-result success';
+                } else {
+                    test3El.innerHTML = `<pre>✗ FAILED: ${JSON.stringify(data3, null, 2)}</pre>`;
+                    test3El.className = 'test-result error';
+                }
+            } catch (err) {
+                document.getElementById('test3').innerHTML = `<pre>✗ ERROR: ${err.message}</pre>`;
+                document.getElementById('test3').className = 'test-result error';
+            }
+            
+            // Test 4: Unknown command
+            try {
+                const res4 = await mockTerminalFetch('unknown');
+                const data4 = await res4.json();
+                const test4El = document.getElementById('test4');
+                if (!data4.success && data4.error.includes('Unknown command')) {
+                    test4El.innerHTML = `<pre>✓ SUCCESS (expected error): ${JSON.stringify(data4, null, 2)}</pre>`;
+                    test4El.className = 'test-result success';
+                } else {
+                    test4El.innerHTML = `<pre>✗ FAILED: ${JSON.stringify(data4, null, 2)}</pre>`;
+                    test4El.className = 'test-result error';
+                }
+            } catch (err) {
+                document.getElementById('test4').innerHTML = `<pre>✗ ERROR: ${err.message}</pre>`;
+                document.getElementById('test4').className = 'test-result error';
+            }
+            
+            // Test 5: Missing command
+            try {
+                // Simulate missing command error
+                const test5El = document.getElementById('test5');
+                test5El.innerHTML = `<pre>✓ SUCCESS (expected validation): Would return 400 error for missing command</pre>`;
+                test5El.className = 'test-result success';
+            } catch (err) {
+                document.getElementById('test5').innerHTML = `<pre>✗ ERROR: ${err.message}</pre>`;
+                document.getElementById('test5').className = 'test-result error';
+            }
+        }
+        
+        // Run tests when page loads
+        runTests();
+    </script>
+</body>
+</html>

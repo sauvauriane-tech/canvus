@@ -335,6 +335,56 @@ export default {
       });
     }
 
+    // ── POST /terminal — terminal command handler ─────────────────────────────
+    if (pathname === '/terminal') {
+      if (request.method !== 'POST') return jsonRes({ error: 'POST only' }, 405);
+
+      let body;
+      try { body = await request.json(); }
+      catch { return jsonRes({ error: 'Invalid JSON body' }, 400); }
+
+      const { command, args = [] } = body;
+      if (!command) return jsonRes({ error: 'Missing command' }, 400);
+
+      // Terminal command processor
+      let response = { success: true, output: '' };
+
+      try {
+        switch (command.toLowerCase()) {
+          case 'echo':
+            response.output = args.join(' ');
+            break;
+          case 'date':
+            response.output = new Date().toISOString();
+            break;
+          case 'help':
+            response.output = 'Available commands: echo, date, help, import';
+            break;
+          case 'import':
+            if (args.length < 2) {
+              response = { success: false, error: 'import requires filename and target URL' };
+              break;
+            }
+            const [filename, targetUrl] = args;
+            // Validate URL format
+            if (!targetUrl.includes('#/file_') || !targetUrl.includes('/page_')) {
+              response = { success: false, error: 'Invalid target URL format. Use: #/file_<fileId>/page_<pageId>' };
+              break;
+            }
+            response.output = `Import scheduled: ${filename} -> ${targetUrl}`;
+            // In a real implementation, this would trigger the actual import process
+            // For now, we return a success message
+            break;
+          default:
+            response = { success: false, error: `Unknown command: ${command}` };
+        }
+      } catch (err) {
+        response = { success: false, error: err.message };
+      }
+
+      return jsonRes(response);
+    }
+
     // ── Everything else → static assets ──────────────────────────────────────
     return env.ASSETS.fetch(request);
   },
