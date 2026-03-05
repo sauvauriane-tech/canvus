@@ -3,185 +3,142 @@
  * canvus-ai — Canvus AI CLI
  *
  * Usage:
- *   canvus-ai "Rename all layers"               # plan only
- *   canvus-ai "Align buttons" --apply           # plan then broadcast via /ai/apply
- *   canvus-ai apply --ops ops.json              # apply a saved ops file directly
+ *   canvus-ai "create a landing page"                       # generate, save output.canvus.json
+ *   canvus-ai --input design.canvus.json "make hero taller" # edit existing doc
+ *   canvus-ai push design.canvus.json                       # push file to cloud (KV)
+ *   canvus-ai pull                                          # pull cloud state to canvus-state.json
+ *   canvus-ai pull --output my.canvus.json                  # pull to specific file
+ *
+ * After generating, open Canvus in your browser and click "↓ AI" to load the design.
+ * After editing in Canvus, click "↑ AI" to push changes, then run canvus-ai again to iterate.
  *
  * Environment:
  *   CANVUS_WORKER_URL   Worker base URL (default: http://localhost:8787)
- *   CANVUS_ROOM         Room ID for WebSocket broadcast (default: "default")
  */
 
-import * as fs from "fs";
-import { parseArgs } from "node:util";
+import * as fs from 'fs';
+import { parseArgs } from 'node:util';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const WORKER = (process.env.CANVUS_WORKER_URL ?? "http://localhost:8787").replace(/\/$/, "");
-const ROOM   =  process.env.CANVUS_ROOM ?? "default";
+const WORKER = (process.env.CANVUS_WORKER_URL ?? 'http://localhost:8787').replace(/\/$/, '');
 
 // ── Args ──────────────────────────────────────────────────────────────────────
 const { values, positionals } = parseArgs({
   args: process.argv.slice(2),
   options: {
-    apply: { type: "boolean", short: "a", default: false },
-    sel:   { type: "string",  short: "s", default: "" },
-    ops:   { type: "string",  short: "o" },
-    room:  { type: "string",  default: ROOM },
-    help:  { type: "boolean", short: "h", default: false },
+    input:  { type: 'string',  short: 'i' },
+    output: { type: 'string',  short: 'o' },
+    help:   { type: 'boolean', short: 'h', default: false },
   },
   allowPositionals: true,
   strict: false,
 });
 
-if (values.help) { printHelp(); process.exit(0); }
+if (values.help || positionals.length === 0) { printHelp(); process.exit(0); }
 
-// ── Subcommand: apply a saved ops file directly ───────────────────────────────
-if (positionals[0] === "apply") {
-  const path = values.ops as string | undefined;
-  if (!path || !fs.existsSync(path)) {
-    console.error("Error: --ops <file> required for apply subcommand"); process.exit(1);
-  }
-  await postApply(JSON.parse(fs.readFileSync(path, "utf8")), values.room as string);
+const subcommand = positionals[0];
+
+// ── canvus-ai pull ────────────────────────────────────────────────────────────
+if (subcommand === 'pull') {
+  const outFile = (values.output as string | undefined) || 'canvus-state.json';
+  console.log(`\n  Pulling state from ${WORKER}/state ...`);
+  const res = await fetch(`${WORKER}/state`);
+  if (!res.ok) { console.error(`  x ${res.status} ${res.statusText}`); process.exit(1); }
+  const doc = await res.json();
+  fs.writeFileSync(outFile, JSON.stringify(doc, null, 2));
+  console.log(`  Saved to ${outFile}\n`);
   process.exit(0);
 }
 
-// ── Default: chat ─────────────────────────────────────────────────────────────
-const prompt = positionals.join(" ").trim();
+// ── canvus-ai push <file> ─────────────────────────────────────────────────────
+if (subcommand === 'push') {
+  const inFile = positionals[1] || (values.input as string | undefined);
+  if (!inFile || !fs.existsSync(inFile)) {
+    console.error('  Error: provide a file path  ->  canvus-ai push design.canvus.json');
+    process.exit(1);
+  }
+  const doc = JSON.parse(fs.readFileSync(inFile, 'utf8'));
+  console.log(`\n  Pushing ${inFile} -> ${WORKER}/state ...`);
+  const res = await fetch(`${WORKER}/state`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(doc),
+  });
+  if (!res.ok) { console.error(`  x ${res.status} ${res.statusText}`); process.exit(1); }
+  console.log(`  Pushed. Open Canvus and click "down AI" to load the design.\n`);
+  process.exit(0);
+}
+
+// ── canvus-ai "prompt" [--input file] ─────────────────────────────────────────
+const prompt = positionals.join(' ').trim();
 if (!prompt) { printHelp(); process.exit(1); }
 
-const selectionIds = (values.sel as string)
-  .split(",").map(s => s.trim()).filter(Boolean);
+// Load existing document if --input provided
+let existingDoc: unknown = null;
+const inputFile = values.input as string | undefined;
+if (inputFile) {
+  if (!fs.existsSync(inputFile)) { console.error(`  Error: file not found: ${inputFile}`); process.exit(1); }
+  existingDoc = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
+  console.log(`\n  Using existing document: ${inputFile}`);
+}
 
-console.log(`\n  → ${WORKER}/ai/chat`);
-console.log(`  Prompt : "${prompt}"`);
-if (selectionIds.length) console.log(`  Sel    : [${selectionIds.join(", ")}]`);
+console.log(`\n  -> ${WORKER}/generate`);
+console.log(`  Prompt: "${prompt}"`);
+console.log(`  Generating ...\n`);
 
-const res = await fetch(`${WORKER}/ai/chat`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    prompt,
-    context: { selectionIds },    // tools are injected server-side
-  }),
+const res = await fetch(`${WORKER}/generate`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ prompt, ...(existingDoc ? { document: existingDoc } : {}) }),
 });
 
-if (!res.ok) { console.error(`  ✗ ${res.status} ${res.statusText}`); process.exit(1); }
-
-const data = await res.json() as any;
-const toolCalls: MistralToolCall[] = data.choices?.[0]?.message?.tool_calls ?? [];
-
-if (!toolCalls.length) {
-  console.log(`\n  AI: ${data.choices?.[0]?.message?.content ?? "(no response)"}\n`);
-  process.exit(0);
+if (!res.ok) {
+  const err = await res.json() as any;
+  console.error(`  x ${res.status}: ${err.error || res.statusText}`);
+  process.exit(1);
 }
 
-// Parse arguments string → plain op objects
-const ops = toolCalls.map(tc => ({
-  type: tc.function.name,
-  ...JSON.parse(tc.function.arguments),
-}));
+const data = await res.json() as { document: unknown; summary?: string; error?: string };
 
-console.log(`\n  ${ops.length} op${ops.length !== 1 ? "s" : ""} proposed:\n`);
-console.log(formatPlan(toolCalls));
+if (data.error) { console.error(`  x ${data.error}`); process.exit(1); }
+if (!data.document) { console.error('  x No document returned'); process.exit(1); }
 
-if (values.apply) {
-  console.log();
-  await postApply(ops, values.room as string);
-}
+const outFile = (values.output as string | undefined) || 'output.canvus.json';
+fs.writeFileSync(outFile, JSON.stringify(data.document, null, 2));
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface MistralToolCall {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
-}
-
-// ── formatPlan ────────────────────────────────────────────────────────────────
-function formatPlan(toolCalls: MistralToolCall[]): string {
-  const ICONS: Record<string, string> = {
-    create_element: "+", delete_elements: "−", rename_element: "↳",
-    set_property: "·", move_elements: "→", resize_element: "↔",
-    group_elements: "⊡", ungroup_elements: "⊡",
-    set_fill: "◉", add_fill: "◉", remove_fill: "◉", set_stroke: "▭",
-    add_effect: "✦", remove_effect: "✦",
-    align_elements: "⊞", distribute_elements: "⊟",
-    set_auto_layout: "⊛", remove_auto_layout: "⊛",
-    add_prototype_connection: "⇢", batch: "◈",
-  };
-
-  return toolCalls.map((tc, i) => {
-    const args = JSON.parse(tc.function.arguments);
-    const icon = ICONS[tc.function.name] ?? "·";
-    const desc = describeOp(tc.function.name, args);
-    const why  = args.reason ? `\n       ${dim(args.reason)}` : "";
-    return `  ${String(i + 1).padStart(2)}. ${icon}  ${desc}${why}`;
-  }).join("\n");
-}
-
-function describeOp(name: string, a: Record<string, any>): string {
-  const ids = a.ids ? `[${(a.ids as number[]).join(", ")}]` : "";
-  switch (name) {
-    case "create_element":           return `CREATE ${a.elType} "${a.name ?? ""}"  (${a.x},${a.y})  ${a.w}×${a.h}`;
-    case "delete_elements":          return `DELETE ${ids}`;
-    case "rename_element":           return `RENAME #${a.id}  →  "${a.name}"`;
-    case "set_property":             return `SET ${a.key} = ${JSON.stringify(a.value)}  on ${ids}`;
-    case "move_elements":            return `MOVE ${ids}  dx:${sign(a.dx)}  dy:${sign(a.dy)}`;
-    case "resize_element":           return `RESIZE #${a.id}  ${a.w ?? "?"}×${a.h ?? "?"}`;
-    case "group_elements":           return `GROUP ${ids}  →  "${a.name ?? ""}"`;
-    case "ungroup_elements":         return `UNGROUP ${ids}`;
-    case "set_fill":                 return `FILL ${ids}  ${a.color ?? ""}  ${a.opacity != null ? a.opacity + "%" : ""}`;
-    case "add_fill":                 return `ADD FILL ${a.color}  on ${ids}`;
-    case "remove_fill":              return `REMOVE FILL [${a.fillIndex}]  from ${ids}`;
-    case "set_stroke":               return `STROKE ${ids}  ${a.color ?? ""}  ${a.width != null ? a.width + "px" : ""}`;
-    case "add_effect":               return `EFFECT ${a.effectType}${a.preset ? ` (${a.preset})` : ""}  on ${ids}`;
-    case "remove_effect":            return `REMOVE EFFECT [${a.effectIndex}]  from ${ids}`;
-    case "align_elements":           return `ALIGN ${ids}  →  ${a.direction}`;
-    case "distribute_elements":      return `DISTRIBUTE ${ids}  axis:${a.axis}`;
-    case "set_auto_layout":          return `AUTO LAYOUT #${a.id}  ${a.direction}  gap:${a.gap}`;
-    case "remove_auto_layout":       return `REMOVE AUTO LAYOUT #${a.id}`;
-    case "add_prototype_connection": return `PROTO #${a.fromId}  →  #${a.toId}  (${a.trigger ?? "click"})`;
-    case "batch":                    return `BATCH  [${(a.ops as any[]).length} ops]`;
-    default:                         return `${name}  ${JSON.stringify(a).slice(0, 80)}`;
-  }
-}
-
-// ── postApply ─────────────────────────────────────────────────────────────────
-async function postApply(ops: unknown[], roomId: string): Promise<void> {
-  console.log(`  → ${WORKER}/ai/apply  (room: ${roomId})`);
-
-  const res = await fetch(`${WORKER}/ai/apply`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ops, room: roomId }),
-  });
-
-  const data = await res.json() as any;
-  if (!res.ok) { console.error(`  ✗ apply failed: ${JSON.stringify(data)}`); process.exit(1); }
-  console.log(`  ✓ Broadcast to ${data.broadcast ?? "?"} client(s)\n`);
-}
+console.log(`  ${data.summary || 'Done.'}`);
+console.log(`  Saved to: ${outFile}`);
+console.log(`\n  Next steps:`);
+console.log(`    1. Open Canvus in your browser`);
+console.log(`    2. Click "down AI" in the toolbar to load the design`);
+console.log(`    3. Edit in Canvus, then click "up AI" to push changes back`);
+console.log(`    4. Run: canvus-ai --input ${outFile} "your next prompt"\n`);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function sign(n: number) { return n >= 0 ? `+${n}` : String(n); }
-function dim(s: string)  { return `\x1b[2m${s}\x1b[0m`; }
-
 function printHelp() {
   console.log(`
-  canvus-ai "<prompt>" [--apply] [--sel <ids>] [--room <id>]
-  canvus-ai apply --ops <ops.json> [--room <id>]
+  canvus-ai "<prompt>" [--input <file>] [--output <file>]
+  canvus-ai push <file>
+  canvus-ai pull [--output <file>]
 
-  -a, --apply        Broadcast ops to Canvus via /ai/apply after planning
-  -s, --sel <ids>    Comma-separated element IDs treated as selected
-      --room <id>    WebSocket room (default: "default")
-  -o, --ops <file>   Ops JSON file (apply subcommand only)
+  Commands:
+    "<prompt>"    Generate or modify a Canvus document using Mistral AI
+    push <file>   Push a local .canvus.json file to the cloud (Cloudflare KV)
+    pull          Pull the current cloud state to a local file
 
-  Env:
-    CANVUS_WORKER_URL  (default: http://localhost:8787)
-    CANVUS_ROOM        (default: "default")
+  Options:
+    -i, --input <file>   Existing .canvus.json to modify (for iterative editing)
+    -o, --output <file>  Where to save the result (default: output.canvus.json)
+    -h, --help           Show this help
 
-  Examples:
-    canvus-ai "Align the nav items"
-    canvus-ai "Add grain texture to hero" --apply
-    canvus-ai "Rename layers" --sel 12,14 --apply --room session-42
-    canvus-ai apply --ops plan.json
+  Environment:
+    CANVUS_WORKER_URL    Worker URL (default: http://localhost:8787)
+
+  Workflow:
+    canvus-ai "create a landing page with a hero and 3 features"
+    # -> open Canvus, click "down AI" to see the design
+    # -> edit in Canvus, click "up AI" to push edits
+    canvus-ai pull --output my-design.canvus.json
+    canvus-ai --input my-design.canvus.json "make the hero section taller"
   `);
 }

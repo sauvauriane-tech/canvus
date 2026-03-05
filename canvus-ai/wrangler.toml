@@ -3,6 +3,13 @@ main = "backend/worker.ts"
 compatibility_date = "2024-09-23"
 
 
+# ── KV namespace for document state sync ─────────────────────────────────────
+# Create with: wrangler kv namespace create CANVUS_STATE
+# Then paste the returned id below.
+[[kv_namespaces]]
+binding = "CANVUS_STATE"
+id      = "REPLACE_WITH_KV_NAMESPACE_ID"
+
 # ── Secrets (set via `wrangler secret put MISTRAL_API_KEY`) ───────────────────
 # Do NOT put the real key here; this section documents expected secrets only.
 # [vars]

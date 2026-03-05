@@ -5061,7 +5061,55 @@ function toggleTheme() {
 }
 
 // ── Canvus AI panel ───────────────────────────────────────────────────────────
-const _AI_URL = '/ai';
+const _AI_URL      = '/ai';
+const _STATE_URL   = '/state';
+const _GENERATE_URL = '/generate';
+
+// ─── Cloud Sync ───────────────────────────────────────────────────────────────
+
+async function pullFromCloud() {
+  const btn = document.getElementById('btn-pull-cloud');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const res = await fetch(_STATE_URL);
+    if (!res.ok) { notify('No cloud state — run: canvus-ai "create ..."'); return; }
+    const doc = await res.json();
+    if (!doc || !Array.isArray(doc.els)) { notify('Cloud state is empty'); return; }
+    pushUndo();
+    S.els         = JSON.parse(JSON.stringify(doc.els        || []));
+    S.pages       = JSON.parse(JSON.stringify(doc.pages      || [{id:1,name:'Page 1'}]));
+    S.page        = doc.page        || S.pages[0]?.id || 1;
+    S.protoConns  = JSON.parse(JSON.stringify(doc.protoConns || []));
+    S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
+    S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
+    S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
+    renderAll(); updateProps(); updateLayers(); updatePages();
+    notify('↓ Design pulled from cloud');
+  } catch (err) {
+    notify('Pull failed: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↓ AI'; }
+  }
+}
+
+async function pushToCloud() {
+  const btn = document.getElementById('btn-push-cloud');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const doc = JSON.parse(_snapState());
+    const res = await fetch(_STATE_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(doc),
+    });
+    if (!res.ok) { notify('Push failed'); return; }
+    notify('↑ Design pushed to cloud');
+  } catch (err) {
+    notify('Push failed: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↑ AI'; }
+  }
+}
 
 function toggleAI() {
   const panel = document.getElementById('ai-panel');
