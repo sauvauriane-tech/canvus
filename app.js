@@ -5061,7 +5061,7 @@ function toggleTheme() {
 }
 
 // ── Canvus AI panel ───────────────────────────────────────────────────────────
-const _AI_URL = 'https://canvus-ai.sauvauriane.workers.dev';
+const _AI_URL = '/ai';
 
 function toggleAI() {
   const panel = document.getElementById('ai-panel');
