@@ -32,6 +32,29 @@ input{font-family:inherit;}
   --measure:#00c2a8;
 }
 
+/* ── LIGHT MODE OVERRIDES ── */
+[data-theme="light"]{
+  --bg:#f4f4f8;
+  --surface:#ffffff;
+  --surface2:#ededf4;
+  --surface3:#e4e4ee;
+  --border:#d0d0de;
+  --border2:#c0c0d0;
+  --text:#1a1a28;
+  --text2:#505070;
+  --text3:#9090b0;
+  --canvas:#dcdce8;
+}
+/* Swap white-on-dark borders to dark-on-light */
+[data-theme="light"] .fill-swatch{border-color:rgba(0,0,0,.15);}
+[data-theme="light"] .cs-dot{border-color:rgba(0,0,0,.12);}
+/* Keep tooltips dark (readable inverse) */
+[data-theme="light"] .tt{background:#2a2a3e;color:#f0f0f8;border-color:#3a3a50;}
+/* Glass in light = frosted white */
+[data-theme="light"] .has-glass{background:rgba(255,255,255,.55)!important;border-color:rgba(0,0,0,.1)!important;}
+/* Theme toggle */
+#theme-toggle{font-size:15px;line-height:1;padding:4px 8px;}
+
 /* ── LAYOUT ── */
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none;font-size:13px;}
 #main{display:flex;flex:1;overflow:hidden;min-height:0;}

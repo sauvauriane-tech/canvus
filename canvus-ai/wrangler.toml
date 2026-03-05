@@ -1,5 +1,5 @@
 name       = "canvus-ai"
-main       = "src/worker.ts"
+main = "backend/worker.ts"
 compatibility_date = "2024-09-23"
 
 # ── Durable Objects ───────────────────────────────────────────────────────────

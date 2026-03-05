@@ -86,8 +86,9 @@ function renderGrid() {
   ctx.clearRect(0,0,w,h);
 
   if (!S.gridOn) {
-    // quiet dot grid
-    ctx.fillStyle = 'rgba(55,55,68,0.7)';
+    // quiet dot grid — lighter in light mode
+    const light = document.documentElement.dataset.theme === 'light';
+    ctx.fillStyle = light ? 'rgba(100,100,130,0.35)' : 'rgba(55,55,68,0.7)';
     const sp = 24;
     for (let x = S.panX%sp; x < w; x += sp)
       for (let y = S.panY%sp; y < h; y += sp)
@@ -5039,4 +5040,22 @@ Grid + Snap = clean spacing • Share to get feedback`,
   updateProps();
   setTimeout(wsSaveCurrentFile, 0);
   setTimeout(()=>notify('Welcome to Canvus ✦  Hold Alt over elements to measure spacing'), 400);
+
+  // Init theme from localStorage
+  (function(){
+    const t = localStorage.getItem('canvus-theme') || 'light';
+    document.documentElement.dataset.theme = t;
+    const btn = document.getElementById('theme-toggle');
+    if (btn) btn.textContent = t === 'light' ? '🌙' : '☀';
+  })();
 })();
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('canvus-theme', next);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = next === 'light' ? '🌙' : '☀';
+  renderGrid();
+}
