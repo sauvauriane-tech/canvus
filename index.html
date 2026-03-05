@@ -80,6 +80,16 @@
     <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><circle cx="9" cy="2" r="1.5" stroke="currentColor" stroke-width="1.1"/><circle cx="9" cy="9" r="1.5" stroke="currentColor" stroke-width="1.1"/><circle cx="2" cy="5.5" r="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M7.5 2.7L3.5 4.8M3.5 6.2l4 2.1" stroke="currentColor" stroke-width="1.1"/></svg>
     Share
   </button>
+  <button class="btn btn-ghost" id="btn-pull-cloud" onclick="pullFromCloud()" title="Pull from Cloud — load AI-generated design into canvas">
+    ↓ AI
+  </button>
+  <button class="btn btn-ghost" id="btn-push-cloud" onclick="pushToCloud()" title="Push to Cloud — save current canvas state for AI">
+    ↑ AI
+  </button>
+  <button class="btn btn-ghost" id="btn-ai" onclick="toggleAI()" title="Canvus AI">
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><path d="M5.5 1l1.1 3.3H10L7.2 6.4l1.1 3.3-2.8-2-2.8 2 1.1-3.3L1 4.3h3.4z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" fill="none"/></svg>
+    AI
+  </button>
   <button class="btn btn-primary" onclick="openPresent()">Present</button>
 </div>
 
@@ -370,6 +380,26 @@
     <button class="zoom-btn" id="zoom-lbl" onclick="resetZoom()">100%</button>
   </div>
 </div>
+<!-- ══════════════ AI PANEL ══════════════ -->
+<div id="ai-panel">
+  <div id="ai-hdr">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.3 3.9H11.5L8.3 7.2l1.2 3.9-3-2.2-3 2.2 1.2-3.9L1.5 4.9H5.2z" stroke="var(--accent)" stroke-width="1.1" stroke-linejoin="round"/></svg>
+    <h3>Canvus AI</h3>
+    <button id="ai-close" onclick="closeAI()">×</button>
+  </div>
+  <div id="ai-tabs">
+    <button class="ai-tab active" id="ai-tab-edit" onclick="setAIMode('edit')">Edit canvas</button>
+    <button class="ai-tab" id="ai-tab-gen" onclick="setAIMode('generate')">Generate page</button>
+  </div>
+  <div id="ai-body">
+    <textarea id="ai-input" placeholder="Ask AI to edit your design… (Enter to send)" rows="3"></textarea>
+    <div id="ai-footer">
+      <span id="ai-status"></span>
+      <button class="btn btn-primary" id="ai-send" onclick="sendAIPrompt()">Send</button>
+    </div>
+  </div>
+</div>
+
 <div id="notif"></div>
 
 <!-- ══════════════ RICH TEXT FORMAT BAR ══════════════ -->
@@ -398,5 +428,6 @@
 </div>
 
 <script src="app.js" defer></script>
+<script src="canvus-ai/ai/apply.js" defer></script>
 </body>
 </html>

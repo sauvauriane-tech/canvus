@@ -5062,3 +5062,172 @@ function toggleTheme() {
   if (btn) btn.innerHTML = next === 'light' ? _ICON_MOON : _ICON_SUN;
   renderGrid();
 }
+
+// ── Canvus AI panel ───────────────────────────────────────────────────────────
+const _AI_URL      = '/ai';
+const _STATE_URL   = '/state';
+const _GENERATE_URL = '/generate';
+
+// ─── Cloud Sync ───────────────────────────────────────────────────────────────
+
+async function pullFromCloud() {
+  const btn = document.getElementById('btn-pull-cloud');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const res = await fetch(_STATE_URL);
+    if (!res.ok) { notify('No cloud state — run: canvus-ai "create ..."'); return; }
+    const doc = await res.json();
+    if (!doc || !Array.isArray(doc.els)) { notify('Cloud state is empty'); return; }
+    pushUndo();
+    S.els         = JSON.parse(JSON.stringify(doc.els        || []));
+    S.pages       = JSON.parse(JSON.stringify(doc.pages      || [{id:1,name:'Page 1'}]));
+    S.page        = doc.page        || S.pages[0]?.id || 1;
+    S.protoConns  = JSON.parse(JSON.stringify(doc.protoConns || []));
+    S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
+    S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
+    S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
+    renderAll(); updateProps(); updateLayers(); updatePages();
+    notify('↓ Design pulled from cloud');
+  } catch (err) {
+    notify('Pull failed: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↓ AI'; }
+  }
+}
+
+async function pushToCloud() {
+  const btn = document.getElementById('btn-push-cloud');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const doc = JSON.parse(_snapState());
+    const res = await fetch(_STATE_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(doc),
+    });
+    if (!res.ok) { notify('Push failed'); return; }
+    notify('↑ Design pushed to cloud');
+  } catch (err) {
+    notify('Push failed: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↑ AI'; }
+  }
+}
+
+function toggleAI() {
+  const panel = document.getElementById('ai-panel');
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) document.getElementById('ai-input').focus();
+}
+
+function closeAI() {
+  document.getElementById('ai-panel').classList.remove('open');
+}
+
+let _aiMode = 'edit'; // 'edit' | 'generate'
+function setAIMode(mode) {
+  _aiMode = mode;
+  document.getElementById('ai-tab-edit').classList.toggle('active', mode === 'edit');
+  document.getElementById('ai-tab-gen').classList.toggle('active', mode === 'generate');
+  const input = document.getElementById('ai-input');
+  input.placeholder = mode === 'generate'
+    ? 'Describe a page to create… e.g. "landing page with hero and 3 feature cards"'
+    : 'Ask AI to edit your design… (Enter to send)';
+}
+
+async function sendAIPrompt() {
+  const input  = document.getElementById('ai-input');
+  const status = document.getElementById('ai-status');
+  const btn    = document.getElementById('ai-send');
+  const prompt = input.value.trim();
+  if (!prompt) return;
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  status.textContent = 'Thinking…';
+
+  try {
+    if (_aiMode === 'generate') {
+      // ── Generate mode: create a full document from scratch ──────────────────
+      const res = await fetch(_GENERATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch {
+        status.textContent = `Worker error ${res.status} — see console.`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      if (!res.ok || data.error) {
+        status.textContent = data?.error || `Worker error ${res.status}.`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      const doc = data.document;
+      if (!doc || !Array.isArray(doc.els)) {
+        status.textContent = 'AI returned an empty document.';
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      pushUndo();
+      S.els         = JSON.parse(JSON.stringify(doc.els        || []));
+      S.pages       = JSON.parse(JSON.stringify(doc.pages      || [{id:1,name:'Page 1'}]));
+      S.page        = doc.page        || S.pages[0]?.id || 1;
+      S.protoConns  = JSON.parse(JSON.stringify(doc.protoConns || []));
+      S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
+      S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
+      S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
+      renderAll(); updateProps(); updateLayers(); updatePages();
+      input.value = '';
+      status.textContent = data.summary || 'Page generated.';
+    } else {
+      // ── Edit mode: modify current canvas with JS code ────────────────────────
+      const doc = {
+        pageName: S.pages.find(p => p.id === S.page)?.name || 'Page',
+        page: S.page,
+        els: S.els.filter(e => e.page === S.page).map(e => ({
+          id: e.id, type: e.type, name: e.name,
+          x: e.x, y: e.y, w: e.w, h: e.h,
+          ...(e.parentId ? { parentId: e.parentId } : {}),
+          ...(e.text     ? { text: e.text }         : {}),
+        })),
+      };
+      const res = await fetch(_AI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, document: doc, selIds: S.selIds }),
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch {
+        status.textContent = `Worker error ${res.status} — see console.`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      if (!res.ok) {
+        status.textContent = data.error || `Worker error ${res.status}.`;
+        btn.disabled = false; btn.textContent = 'Send'; return;
+      }
+      if (data.ops?.length) {
+        const { applied, skipped } = applyOps(data.ops);
+        input.value = '';
+        status.textContent = data.summary || `Applied ${applied.length} change${applied.length !== 1 ? 's' : ''}.`;
+        if (skipped.length) console.warn('[Canvus AI] skipped ops:', skipped);
+      } else {
+        status.textContent = data.summary || data.error || 'No changes made.';
+      }
+    }
+  } catch (err) {
+    console.error('[Canvus AI] fetch failed:', err);
+    status.textContent = `Network error: ${err.message}`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Send';
+}
+
+// Send on Enter (Shift+Enter = newline)
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('ai-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAIPrompt(); }
+  });
+});
