@@ -272,7 +272,91 @@ function closeFrameDropdown() {
   const dd = document.getElementById('frame-tool-dd');
   if (dd) dd.style.display = 'none';
 }
-document.addEventListener('click', closeFrameDropdown);
+
+function toggleImportDropdown() {
+  const dropdown = document.getElementById('import-dropdown');
+  dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+function closeImportDropdown() {
+  document.getElementById('import-dropdown').style.display = 'none';
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(event) {
+  const importDropdown = document.getElementById('import-dropdown');
+  const frameDropdown = document.getElementById('frame-tool-dd');
+  
+  if (importDropdown && !event.target.closest('#import-dropdown') && event.target.id !== 'import-dropdown-btn') {
+    importDropdown.style.display = 'none';
+  }
+  
+  if (frameDropdown && !event.target.closest('#frame-tool-dd') && event.target.id !== 'tb-frame-dd-btn') {
+    frameDropdown.style.display = 'none';
+  }
+});
+
+// Add drag-and-drop support for HTML import
+function setupHTMLImportDragDrop() {
+  const htmlImportModal = document.getElementById('html-import-modal');
+  const dropArea = document.createElement('div');
+  dropArea.id = 'html-import-drop-area';
+  dropArea.style.cssText = 'border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;margin-bottom:10px;display:none;';
+  dropArea.innerHTML = '
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="margin:0 auto 10px;opacity:.5;">
+      <path d="M16 4v24M4 16h24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <p style="color:var(--text3);font-size:12px;">Drag & drop HTML file here</p>
+  ';
+  
+  const htmlInput = document.getElementById('html-import-html');
+  if (htmlInput && htmlImportModal) {
+    htmlInput.parentNode.insertBefore(dropArea, htmlInput);
+    
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = 'var(--accent)';
+      dropArea.style.backgroundColor = 'rgba(124, 106, 238, 0.05)';
+    });
+    
+    dropArea.addEventListener('dragleave', () => {
+      dropArea.style.borderColor = 'var(--border)';
+      dropArea.style.backgroundColor = 'transparent';
+    });
+    
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = 'var(--border)';
+      dropArea.style.backgroundColor = 'transparent';
+      
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.html')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          document.getElementById('html-import-html').value = event.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+    
+    // Show drop area when modal is opened
+    const originalShow = window.showHTMLImportModal;
+    window.showHTMLImportModal = function() {
+      originalShow();
+      dropArea.style.display = 'block';
+    };
+    
+    // Hide drop area when modal is closed
+    const originalClose = window.closeHTMLImportModal;
+    window.closeHTMLImportModal = function() {
+      originalClose();
+      dropArea.style.display = 'none';
+    };
+  }
+}
+
+// Initialize drag-and-drop when the app loads
+setTimeout(setupHTMLImportDragDrop, 1000);
 
 // ════════════════════════════════════════════════════════════
 // ELEMENT FACTORY & CRUD

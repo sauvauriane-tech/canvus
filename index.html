@@ -75,16 +75,26 @@
   </div>
   <div class="tb-sep"></div>
   <button class="btn btn-ghost" id="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M10.2 7.2A4.7 4.7 0 0 1 5.8 2.8c0-.45.06-.88.18-1.3A4.7 4.7 0 1 0 10.2 7.2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
-  <label class="btn btn-ghost" style="cursor:pointer;" title="Import Figma JSON (.json) or drop on canvas">
-    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><path d="M5.5 1v6M2.5 5L5.5 8 8.5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-    Import
-    <input type="file" id="import-file-input" accept=".json,.fig" style="display:none" onchange="importFigmaFile(event)">
-  </label>
-  <button class="btn btn-ghost" onclick="showHTMLImportModal()" title="Import HTML — convert HTML+CSS to editable Canvus nodes">
-    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><path d="M3 2L1 5.5 3 9M8 2l2 3.5L8 9M6 1.5l-1 8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    HTML
-  </button>
-  <button class="btn btn-ghost" onclick="showHTMLExportModal()" title="Export to HTML/CSS — generate code from Canvus nodes">
+  <!-- Import Dropdown -->
+  <div style="position:relative;display:inline-block;">
+    <button class="btn btn-ghost" onclick="toggleImportDropdown()" title="Import — add content to Canvus">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><path d="M5.5 1v6M2.5 5L5.5 8 8.5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      Import ▾
+    </button>
+    <div id="import-dropdown" style="display:none;position:absolute;top:100%;left:0;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:4px;z-index:500;white-space:nowrap;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);">
+      <div class="import-dd-item" onclick="document.getElementById('import-file-input').click()">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="margin-right:6px"><path d="M6.5 1l1.3 3.9H11.5L8.3 7.2l1.2 3.9-3-2.2-3 2.2 1.2-3.9L1.5 4.9H5.2z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
+        Figma JSON
+        <input type="file" id="import-file-input" accept=".json,.fig" style="display:none" onchange="importFigmaFile(event)">
+      </div>
+      <div class="import-dd-item" onclick="showHTMLImportModal()">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="margin-right:6px"><path d="M3 2L1 5.5 3 9M8 2l2 3.5L8 9M6 1.5l-1 8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        HTML/CSS
+      </div>
+    </div>
+  </div>
+  <!-- Export Button -->
+  <button class="btn btn-ghost" onclick="showHTMLExportModal()" title="Export — generate code from Canvus">
     <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><path d="M3 2L1 5.5 3 9M8 2l2 3.5L8 9M6 1.5l-1 8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8v-6M3 6l2.5 2.5L8 6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Export
   </button>
