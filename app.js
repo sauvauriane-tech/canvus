@@ -1279,6 +1279,9 @@ function renderElement(el) {
     if (ev.target.classList.contains('rh')) return;
     if (S.tool !== 'select') return;
     if (el.locked) return;
+    // If this text element is already in edit mode, let the browser handle
+    // cursor placement and text selection natively — don't intercept.
+    if (el.type === 'text' && dom.contentEditable === 'true') return;
     ev.stopPropagation();
 
     // Component protection: first click selects the whole component/instance
@@ -5626,8 +5629,12 @@ async function sendAIPrompt() {
       S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
       S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
       S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
-      // Ensure all elements have the correct page field (AI may omit it)
-      S.els.forEach(el => { if (el.page == null) el.page = S.page; });
+      // Ensure all elements have the correct page and visible fields (AI may omit them)
+      S.els.forEach(el => {
+        if (el.page == null) el.page = S.page;
+        if (el.visible == null) el.visible = true;
+        if (el.opacity == null) el.opacity = 100;
+      });
       renderAll(); updateProps(); updateLayers(); updatePages(); zoomToFit();
       input.value = '';
       status.textContent = data.summary || 'Page generated.';
