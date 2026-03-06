@@ -1101,7 +1101,7 @@ function renderElement(el) {
     if (el.type==='frame') {
       dom.classList.add('cel-frame');
       renderLayoutGrid(dom, el);
-      if (el.w > 0) {
+      if (el.w > 0 && !el.parentId) {
         const lbl = document.createElement('div');
         lbl.className = 'frame-label';
         lbl.textContent = el.name;
