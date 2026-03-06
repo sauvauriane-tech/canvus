@@ -1331,6 +1331,22 @@ function renderElement(el) {
         // Pass flag so startMove skips its own pushUndo (avoids double-snapshot)
         duplicateSelected(true);
         startMove(ev, true); // true = skipUndo
+      } else if (el.type === 'text') {
+        // Rapid second click on an already-selected text element → activate editing
+        // (dblclick is unreliable here because renderAll() replaces the DOM node on first click)
+        const now = Date.now();
+        if (_textEditPending && _textEditPending.id === el.id && now - _textEditPending.time < 500) {
+          dom.contentEditable = 'true';
+          dom.style.outline = 'none';
+          dom.style.cursor = 'text';
+          dom.style.userSelect = 'text';
+          dom.focus();
+          showTextFmtBar(dom, el);
+          _textEditPending = null;
+        } else {
+          _textEditPending = { id: el.id, time: now };
+          startMove(ev);
+        }
       } else {
         startMove(ev);
       }
@@ -2718,6 +2734,7 @@ function deleteInteraction(elId, idx) {
 // RICH TEXT FORMAT BAR
 // ════════════════════════════════════════════════════════════
 let _fmtDom = null; // contentEditable div currently being edited
+let _textEditPending = null; // {id, time} for rapid-second-click text editing
 
 function showTextFmtBar(dom, el) {
   _fmtDom = dom;
@@ -5790,7 +5807,16 @@ async function runHTMLImport() {
 
   // ── 2b. Full-page mode ────────────────────────────────────────────────────
   const docW = Math.max(390, Math.round(bodyRect.width  || 800));
-  const docH = Math.max(100, Math.round(bodyEl.scrollHeight || bodyRect.height || 900));
+  // Measure actual content height from child bounding rects, not scrollHeight
+  // (scrollHeight inflates to iframe height when body has min-height:100vh etc.)
+  let contentBottom = 0;
+  for (const child of bodyEl.children) {
+    const r = child.getBoundingClientRect();
+    if (r.height > 0) contentBottom = Math.max(contentBottom, r.top + r.height);
+  }
+  const docH = Math.max(100, contentBottom > 0
+    ? Math.round(contentBottom - bodyRect.top)
+    : Math.round(bodyRect.height || 900));
   const rootFrame = mkEl('frame', 200, 200, docW, docH);
   rootFrame.name  = 'Imported Page';
   rootFrame.fills = [{ ...mkFill('#ffffff'), opacity: 100 }];
