@@ -5,7 +5,7 @@ const S = {
   els: [], comments: [],
   pages: [{id:1,name:'WELCOME TO CANVUS'},{id:2,name:'Page 2'}],
   page: 1,
-  nextId: 1,
+  nextId: 3,
   selIds: [],
   tool: 'select',
   zoom: 1, panX: 80, panY: 70,
@@ -273,7 +273,8 @@ function closeFrameDropdown() {
   if (dd) dd.style.display = 'none';
 }
 
-function toggleImportDropdown() {
+function toggleImportDropdown(ev) {
+  ev.stopPropagation();
   const dropdown = document.getElementById('import-dropdown');
   dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
 }
@@ -302,12 +303,12 @@ function setupHTMLImportDragDrop() {
   const dropArea = document.createElement('div');
   dropArea.id = 'html-import-drop-area';
   dropArea.style.cssText = 'border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;margin-bottom:10px;display:none;';
-  dropArea.innerHTML = '
+  dropArea.innerHTML = `
     <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="margin:0 auto 10px;opacity:.5;">
       <path d="M16 4v24M4 16h24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
-    <p style="color:var(--text3);font-size:12px;">Drag & drop HTML file here</p>
-  ';
+    <p style="color:var(--text3);font-size:12px;">Drag &amp; drop HTML file here</p>
+  `;
   
   const htmlInput = document.getElementById('html-import-html');
   if (htmlInput && htmlImportModal) {

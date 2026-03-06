@@ -1070,12 +1070,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);hei
 /* ════════════════════════════════════════════════════════════
    FRAME TOOL DROPDOWN
    ════════════════════════════════════════════════════════════ */
-.fdd-item{
+.fdd-item,.import-dd-item{
   display:flex;align-items:center;gap:7px;
   padding:6px 10px;border-radius:6px;cursor:pointer;
   font-size:12px;color:var(--text);white-space:nowrap;
 }
-.fdd-item:hover{background:var(--accent-soft);}
+.fdd-item:hover,.import-dd-item:hover{background:var(--accent-soft);}
 
 /* ════════════════════════════════════════════════════════════
    EYEDROPPER BUTTON
