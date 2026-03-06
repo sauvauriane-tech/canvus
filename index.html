@@ -93,11 +93,6 @@
       </div>
     </div>
   </div>
-  <!-- Export Button -->
-  <button class="btn btn-ghost" onclick="showHTMLExportModal()" title="Export — generate code from Canvus">
-    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><path d="M3 2L1 5.5 3 9M8 2l2 3.5L8 9M6 1.5l-1 8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 8v-6M3 6l2.5 2.5L8 6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    Export
-  </button>
   <button class="btn btn-ghost" onclick="openShare()">
     <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><circle cx="9" cy="2" r="1.5" stroke="currentColor" stroke-width="1.1"/><circle cx="9" cy="9" r="1.5" stroke="currentColor" stroke-width="1.1"/><circle cx="2" cy="5.5" r="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M7.5 2.7L3.5 4.8M3.5 6.2l4 2.1" stroke="currentColor" stroke-width="1.1"/></svg>
     Share
@@ -154,31 +149,43 @@
       <div class="html-import-tabs">
         <button class="html-import-tab active" id="html-import-tab-page" onclick="setHTMLImportMode('page')">Full page</button>
         <button class="html-import-tab" id="html-import-tab-component" onclick="setHTMLImportMode('component')">Component</button>
+        <button class="html-import-tab" id="html-import-tab-url" onclick="setHTMLImportMode('url')">From URL</button>
       </div>
+      <!-- URL mode -->
+      <div class="html-import-row" id="html-import-url-row" style="display:none">
+        <label class="html-import-label">URL <span class="html-import-hint">e.g. http://localhost:8080/page.html</span></label>
+        <input id="html-import-url" class="html-import-input" placeholder="http://localhost:8080/page.html" spellcheck="false" style="font-family:var(--mono);">
+      </div>
+      <!-- Component ID -->
       <div class="html-import-row" id="html-import-id-row" style="display:none">
         <label class="html-import-label">Component ID <span class="html-import-hint">data-canvus-id of the root element to extract</span></label>
         <input id="html-import-cid" class="html-import-input" placeholder="e.g. card, nav-bar, hero-section" spellcheck="false">
       </div>
-      <div class="html-import-row">
-        <label class="html-import-label">HTML <span class="html-import-hint">paste body content or full page</span></label>
-        <textarea id="html-import-html" class="html-import-ta" placeholder='&lt;div class="card" data-canvus-id="card"&gt;…&lt;/div&gt;' spellcheck="false"></textarea>
-      </div>
-      <div class="html-import-row">
-        <label class="html-import-label">CSS <span class="html-import-hint">paste stylesheet (optional)</span></label>
-        <textarea id="html-import-css" class="html-import-ta html-import-ta-sm" placeholder=":root { --accent: #7c6aee; } .card { background: var(--accent); border-radius: 12px; }" spellcheck="false"></textarea>
+      <!-- Paste rows (hidden in URL mode) -->
+      <div id="html-import-paste-rows">
+        <div class="html-import-row">
+          <label class="html-import-label">HTML <span class="html-import-hint">paste body content or full page</span></label>
+          <textarea id="html-import-html" class="html-import-ta" placeholder='&lt;div class="card" data-canvus-id="card"&gt;…&lt;/div&gt;' spellcheck="false"></textarea>
+        </div>
+        <div class="html-import-row">
+          <label class="html-import-label">CSS <span class="html-import-hint">paste stylesheet (optional)</span></label>
+          <textarea id="html-import-css" class="html-import-ta html-import-ta-sm" placeholder=":root { --accent: #7c6aee; } .card { background: var(--accent); border-radius: 12px; }" spellcheck="false"></textarea>
+        </div>
       </div>
       <div class="html-import-actions">
-        <label class="btn btn-ghost html-import-file-btn" title="Load .html file">
-          HTML file
-          <input type="file" accept=".html,.htm" style="display:none" onchange="htmlImportLoadFile(event,'html')">
-        </label>
-        <label class="btn btn-ghost html-import-file-btn" title="Load .css file">
-          CSS file
-          <input type="file" accept=".css" style="display:none" onchange="htmlImportLoadFile(event,'css')">
-        </label>
+        <span id="html-import-file-btns">
+          <label class="btn btn-ghost html-import-file-btn" title="Load .html file">
+            HTML file
+            <input type="file" accept=".html,.htm" style="display:none" onchange="htmlImportLoadFile(event,'html')">
+          </label>
+          <label class="btn btn-ghost html-import-file-btn" title="Load .css file">
+            CSS file
+            <input type="file" accept=".css" style="display:none" onchange="htmlImportLoadFile(event,'css')">
+          </label>
+        </span>
         <div style="flex:1"></div>
         <button class="btn btn-ghost" onclick="closeHTMLImportModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="runHTMLImport()">Import</button>
+        <button class="btn btn-primary" id="html-import-run-btn" onclick="runHTMLImport()">Import</button>
       </div>
     </div>
   </div>

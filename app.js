@@ -4708,10 +4708,46 @@ function simulatePresence() {
       _pingTimer = setInterval(() => _ws.readyState === 1 && _ws.send('ping'), 30000);
     };
 
-    _ws.onmessage = (ev) => {
+    _ws.onmessage = async (ev) => {
       if (ev.data === 'pong') return;
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === 'html:import' && msg.html) {
+        // External tool (e.g. Mistral CLI) pushed raw HTML — import it directly
+        document.getElementById('html-import-html').value = msg.html;
+        document.getElementById('html-import-css').value  = msg.css || '';
+        const prevMode = _htmlImportMode;
+        _htmlImportMode = 'page';
+        await runHTMLImport();
+        _htmlImportMode = prevMode;
+        notify('HTML imported via WebSocket');
+        return;
+      }
+      // canvas:get — MCP server requesting current state
+      if (msg.type === 'canvas:get') {
+        const state = {
+          page:   S.page,
+          pages:  S.pages,
+          els:    S.els.filter(e => e.page === S.page).map(e => ({
+            id: e.id, type: e.type, name: e.name,
+            x: e.x, y: e.y, w: e.w, h: e.h,
+            parentId: e.parentId || null,
+            text: e.text || '',
+            visible: e.visible, locked: e.locked, opacity: e.opacity,
+            fills: e.fills, textColor: e.textColor, fontSize: e.fontSize,
+            stroke: e.stroke, strokeWidth: e.strokeWidth, rx: e.rx,
+          })),
+          selIds: S.selIds,
+        };
+        _ws.send(JSON.stringify({ type: 'canvas:state', state, _reqId: msg._reqId }));
+        return;
+      }
+      // canvas:select — MCP server selecting elements
+      if (msg.type === 'canvas:select' && Array.isArray(msg.ids)) {
+        S.selIds = msg.ids.filter(id => getEl(id));
+        renderAll(); updateProps();
+        return;
+      }
       if (msg.type !== 'ai:ops' || !Array.isArray(msg.ops)) return;
       pushUndo();
       applyOps(msg.ops);                      // defined in canvus-ai/ai/apply.js
@@ -5616,20 +5652,40 @@ async function sendAIPrompt() {
         btn.disabled = false; btn.textContent = 'Send'; return;
       }
       pushUndo();
-      S.els         = JSON.parse(JSON.stringify(doc.els        || []));
-      S.pages       = JSON.parse(JSON.stringify(doc.pages      || [{id:1,name:'Page 1'}]));
-      S.page        = doc.page        || S.pages[0]?.id || 1;
-      S.protoConns  = JSON.parse(JSON.stringify(doc.protoConns || []));
-      S.comments    = JSON.parse(JSON.stringify(doc.comments   || []));
-      S.colorStyles = JSON.parse(JSON.stringify(doc.colorStyles|| S.colorStyles));
-      S.nextId      = Math.max(doc.nextId || 1, ...S.els.map(e => (e.id||0)+1));
-      // Ensure all elements have the correct page and visible fields (AI may omit them)
-      S.els.forEach(el => {
-        if (el.page == null) el.page = S.page;
+      const newEls = JSON.parse(JSON.stringify(doc.els || []));
+
+      // ── Remap AI element IDs to avoid collisions with existing elements ──
+      const idMap = {};
+      newEls.forEach(el => { idMap[el.id] = S.nextId++; });
+      newEls.forEach(el => {
+        el.id       = idMap[el.id];
+        if (el.parentId != null) el.parentId = idMap[el.parentId] ?? el.parentId;
+        el.page     = S.page;
         if (el.visible == null) el.visible = true;
         if (el.opacity == null) el.opacity = 100;
       });
-      renderAll(); updateProps(); updateLayers(); updatePages(); zoomToFit();
+
+      // ── Find right edge of existing elements on this page, then place new content beside them ──
+      const GAP = 100;
+      const pageEls = S.els.filter(e => e.page === S.page);
+      const existingRight = pageEls.length
+        ? Math.max(...pageEls.map(e => e.x + (e.w || 0)))
+        : 200;
+
+      // Find leftmost X of top-level AI elements (no parentId in new set) to compute offset
+      const topLevel = newEls.filter(e => !newEls.some(p => p.id === e.parentId));
+      const newLeft  = topLevel.length ? Math.min(...topLevel.map(e => e.x)) : 0;
+      const newTop   = topLevel.length ? Math.min(...topLevel.map(e => e.y)) : 0;
+      const offsetX  = existingRight + GAP - newLeft;
+      const offsetY  = (pageEls.length ? Math.min(...pageEls.map(e => e.y)) : 200) - newTop;
+
+      // Apply offset to top-level elements only (children keep relative positions via parentId)
+      topLevel.forEach(el => { el.x += offsetX; el.y += offsetY; });
+
+      S.els.push(...newEls);
+      // Select the first top-level element so user can see what was generated
+      S.selIds = topLevel.length ? [topLevel[0].id] : [];
+      renderAll(); updateProps(); updateLayers();
       input.value = '';
       status.textContent = data.summary || 'Page generated.';
     } else {
@@ -5685,6 +5741,62 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ════════════════════════════════════════════════════════════
+// SCRUB DRAG — horizontal drag on number inputs (like Figma)
+// Drag left/right to decrease/increase value.
+// Shift held = ×10 step. Click without dragging = normal text edit.
+// ════════════════════════════════════════════════════════════
+(function initScrubDrag() {
+  let _sc = null; // { inp, x0, base, dragging }
+
+  document.addEventListener('mousedown', ev => {
+    const inp = ev.target.closest('input[type="number"]');
+    if (!inp) return;
+    _sc = { inp, x0: ev.clientX, base: parseFloat(inp.value) || 0, dragging: false };
+  });
+
+  document.addEventListener('mousemove', ev => {
+    if (!_sc) return;
+    const dx = ev.clientX - _sc.x0;
+    if (!_sc.dragging) {
+      if (Math.abs(dx) < 4) return; // small threshold so clicks still work
+      _sc.dragging = true;
+      _sc.inp.blur(); // exit any active text-edit state
+      document.body.style.cursor = 'ew-resize';
+    }
+    ev.preventDefault();
+    const step = ev.shiftKey ? 10 : 1;
+    let v = _sc.base + Math.round(dx) * step;
+    const mn = parseFloat(_sc.inp.min), mx = parseFloat(_sc.inp.max);
+    if (!isNaN(mn)) v = Math.max(mn, v);
+    if (!isNaN(mx)) v = Math.min(mx, v);
+    _sc.inp.value = v;
+    _sc.inp.dispatchEvent(new Event('input',  { bubbles: true }));
+    _sc.inp.dispatchEvent(new Event('change', { bubbles: true }));
+  }, { capture: true });
+
+  document.addEventListener('mouseup', ev => {
+    if (_sc?.dragging) {
+      document.body.style.cursor = '';
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    _sc = null;
+  }, { capture: true });
+
+  // Show ew-resize cursor when hovering an unfocused number input
+  document.addEventListener('mouseover', ev => {
+    const inp = ev.target.closest('input[type="number"]');
+    if (inp && document.activeElement !== inp) inp.style.cursor = 'ew-resize';
+  });
+  document.addEventListener('focus', ev => {
+    if (ev.target.matches('input[type="number"]')) ev.target.style.cursor = '';
+  }, true);
+  document.addEventListener('blur', ev => {
+    if (ev.target.matches('input[type="number"]')) ev.target.style.cursor = 'ew-resize';
+  }, true);
+})();
+
+// ════════════════════════════════════════════════════════════
 // HTML IMPORT — Convert HTML+CSS subset to Canvus nodes
 // Uses the browser's own layout engine (hidden iframe) so all
 // CSS — flexbox, variables, cascade — is resolved for free.
@@ -5702,7 +5814,13 @@ function setHTMLImportMode(mode) {
   _htmlImportMode = mode;
   document.getElementById('html-import-tab-page').classList.toggle('active', mode === 'page');
   document.getElementById('html-import-tab-component').classList.toggle('active', mode === 'component');
-  document.getElementById('html-import-id-row').style.display = mode === 'component' ? 'flex' : 'none';
+  document.getElementById('html-import-tab-url').classList.toggle('active', mode === 'url');
+  document.getElementById('html-import-id-row').style.display  = mode === 'component' ? 'flex' : 'none';
+  document.getElementById('html-import-url-row').style.display = mode === 'url' ? 'flex' : 'none';
+  document.getElementById('html-import-paste-rows').style.display = mode === 'url' ? 'none' : '';
+  document.getElementById('html-import-file-btns').style.display  = mode === 'url' ? 'none' : '';
+  document.getElementById('html-import-run-btn').onclick =
+    mode === 'url' ? runURLImport : runHTMLImport;
 }
 function htmlImportLoadFile(ev, target) {
   const file = ev.target.files[0]; if (!file) return;
@@ -5710,6 +5828,31 @@ function htmlImportLoadFile(ev, target) {
   const reader = new FileReader();
   reader.onload = e => { document.getElementById(`html-import-${target}`).value = e.target.result; };
   reader.readAsText(file);
+}
+
+async function runURLImport() {
+  const url = document.getElementById('html-import-url').value.trim();
+  if (!url) { notify('Enter a URL to import'); return; }
+  const btn = document.getElementById('html-import-run-btn');
+  btn.disabled = true; btn.textContent = 'Fetching…';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    closeHTMLImportModal();
+    // Feed into existing import pipeline via the hidden textareas
+    document.getElementById('html-import-html').value = html;
+    document.getElementById('html-import-css').value  = '';
+    // Temporarily force page mode so runHTMLImport treats it as a full page
+    const prevMode = _htmlImportMode;
+    _htmlImportMode = 'page';
+    await runHTMLImport();
+    _htmlImportMode = prevMode;
+  } catch (err) {
+    notify(`Could not fetch URL: ${err.message}`);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Import';
+  }
 }
 
 async function runHTMLImport() {
