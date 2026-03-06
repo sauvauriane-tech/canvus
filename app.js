@@ -5716,7 +5716,12 @@ async function runHTMLImport() {
 
   const iDoc = iframe.contentDocument;
   iDoc.open();
-  iDoc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}${cssStr}</style></head><body style="margin:0;padding:0;">${htmlStr}</body></html>`);
+  const isFullDoc = /<!doctype|<html[\s>]/i.test(htmlStr.trimStart().slice(0, 100));
+  if (isFullDoc) {
+    iDoc.write(htmlStr);
+  } else {
+    iDoc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}${cssStr}</style></head><body style="margin:0;padding:0;">${htmlStr}</body></html>`);
+  }
   iDoc.close();
 
   // Force layout computation before measuring
