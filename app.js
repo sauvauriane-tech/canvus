@@ -5789,8 +5789,8 @@ async function runHTMLImport() {
   }
 
   // ── 2b. Full-page mode ────────────────────────────────────────────────────
-  const docW = Math.max(390, Math.round(iDoc.documentElement.scrollWidth  || bodyRect.width  || 1440));
-  const docH = Math.max(100, Math.round(iDoc.documentElement.scrollHeight || bodyRect.height || 900));
+  const docW = Math.max(390, Math.round(bodyRect.width  || 800));
+  const docH = Math.max(100, Math.round(bodyEl.scrollHeight || bodyRect.height || 900));
   const rootFrame = mkEl('frame', 200, 200, docW, docH);
   rootFrame.name  = 'Imported Page';
   rootFrame.fills = [{ ...mkFill('#ffffff'), opacity: 100 }];
@@ -5887,25 +5887,35 @@ function _htmlWalkNode(domEl, parentId, ox, oy, iWin, newEls, unsupported) {
     }
 
   } else {
-    // Generic frame (div, section, nav, …)
-    el      = mkEl('frame', x, y, w, h);
-    el.name = canvusId || domEl.id || domEl.className?.trim().split(/\s+/)[0] || tag;
-    _htmlApplyFrameStyles(el, styles);
+    // Leaf div with only text content → treat as text element
+    const leafText = domEl.children.length === 0 ? (domEl.textContent?.trim() || '') : '';
+    if (leafText) {
+      el      = mkEl('text', x, y, w, h);
+      el.text = leafText;
+      el.name = canvusId || leafText.slice(0, 40) || tag;
+      el.fills = [];
+      _htmlApplyTextStyles(el, styles);
+    } else {
+      // Generic frame (div, section, nav, …)
+      el      = mkEl('frame', x, y, w, h);
+      el.name = canvusId || domEl.id || domEl.className?.trim().split(/\s+/)[0] || tag;
+      _htmlApplyFrameStyles(el, styles);
 
-    // Map flexbox → Canvus autoLayout
-    if (computed.display === 'flex' || computed.display === 'inline-flex') {
-      const isRow  = !computed.flexDirection?.startsWith('column');
-      const gap    = parseFloat(computed.gap || computed.rowGap || computed.columnGap) || 0;
-      const pt     = parseFloat(computed.paddingTop)    || 0;
-      const pr     = parseFloat(computed.paddingRight)  || 0;
-      const pb     = parseFloat(computed.paddingBottom) || 0;
-      const pl     = parseFloat(computed.paddingLeft)   || 0;
-      el.autoLayout = {
-        direction: isRow ? 'horizontal' : 'vertical',
-        gap:       Math.round(gap),
-        padding:   Math.round((pt + pr + pb + pl) / 4), // avg for single-value approximation
-        align:     _htmlMapAlign(computed.alignItems),
-      };
+      // Map flexbox → Canvus autoLayout
+      if (computed.display === 'flex' || computed.display === 'inline-flex') {
+        const isRow  = !computed.flexDirection?.startsWith('column');
+        const gap    = parseFloat(computed.gap || computed.rowGap || computed.columnGap) || 0;
+        const pt     = parseFloat(computed.paddingTop)    || 0;
+        const pr     = parseFloat(computed.paddingRight)  || 0;
+        const pb     = parseFloat(computed.paddingBottom) || 0;
+        const pl     = parseFloat(computed.paddingLeft)   || 0;
+        el.autoLayout = {
+          direction: isRow ? 'horizontal' : 'vertical',
+          gap:       Math.round(gap),
+          padding:   Math.round((pt + pr + pb + pl) / 4),
+          align:     _htmlMapAlign(computed.alignItems),
+        };
+      }
     }
   }
 
