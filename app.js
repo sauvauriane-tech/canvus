@@ -3921,119 +3921,113 @@ async function exportToHTMLCSS(elId, mode = 'full') {
 function generateFullHTMLCSS(elements, rootEl) {
   const htmlParts = [];
   const cssParts = [];
-  
-  // Generate CSS variables
-  cssParts.push(`:root {
-    --bg: #f5f7fa;
-    --text: #333;
-    --text-light: #777;
-    --primary: #4a6bff;
-    --secondary: #6c5ce7;
-    --success: #00cec9;
-    --warning: #fdcb6e;
-    --danger: #e17055;
-    --radius: 8px;
-    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --space-1: 8px;
-    --space-2: 16px;
-    --space-3: 24px;
-    --space-4: 32px;
-    --space-5: 48px;
-  }`);
-  
+
+  // Build a lookup map so we can compute parent-relative coordinates
+  const elementMap = {};
+  elements.forEach(el => { elementMap[el.id] = el; });
+
+  // Map Canvus element types to valid HTML tags
+  function htmlTag(el) {
+    if (el.type === 'text') return 'span';
+    return 'div'; // frame, rect, ellipse, group, line, etc.
+  }
+
+  // Resolve stroke color safely (el.stroke may be a string or accidentally an object)
+  function strokeColor(el) {
+    if (!el.stroke || el.stroke === 'none') return null;
+    if (typeof el.stroke === 'string') return el.stroke;
+    // object fallback
+    return el.stroke.color || el.stroke.hex || null;
+  }
+
+  cssParts.push(`* { box-sizing: border-box; margin: 0; padding: 0; }`);
+
   // Generate CSS for each element
   elements.forEach(el => {
     const cssSelector = `[data-canvus-id="${el.id}"]`;
     const styles = [];
-    
-    // Position and size
-    if (el.x !== undefined && el.y !== undefined) {
-      styles.push(`position: absolute;`);
-      styles.push(`left: ${el.x}px;`);
-      styles.push(`top: ${el.y}px;`);
+    const isRoot = el.id === rootEl.id;
+
+    // Position: root is relative origin; children use coords relative to their parent
+    const parent = el.parentId ? elementMap[el.parentId] : null;
+    const relX = parent ? el.x - parent.x : el.x;
+    const relY = parent ? el.y - parent.y : el.y;
+    styles.push(isRoot ? `position: relative;` : `position: absolute;`);
+    if (!isRoot) {
+      styles.push(`left: ${relX}px;`);
+      styles.push(`top: ${relY}px;`);
     }
     if (el.w !== undefined) styles.push(`width: ${el.w}px;`);
     if (el.h !== undefined) styles.push(`height: ${el.h}px;`);
-    
+
     // Background
-    if (el.fills && el.fills[0]) {
-      const fill = el.fills[0];
-      if (fill.visible !== false && fill.color) {
+    if (el.fills && el.fills.length) {
+      const fill = el.fills.find(f => f.visible !== false && f.color);
+      if (fill) {
         const opacity = fill.opacity !== undefined ? fill.opacity / 100 : 1;
         styles.push(`background-color: ${hexToRGBA(fill.color, opacity)};`);
       }
     }
-    
+
     // Border radius
-    if (el.rx) styles.push(`border-radius: ${el.rx}px;`);
     if (el.cornerRadii) {
-      styles.push(`border-radius: ${el.cornerRadii.tl}px ${el.cornerRadii.tr}px ${el.cornerRadii.br}px ${el.cornerRadii.bl}px;`);
+      styles.push(`border-radius: ${el.cornerRadii.tl||0}px ${el.cornerRadii.tr||0}px ${el.cornerRadii.br||0}px ${el.cornerRadii.bl||0}px;`);
+    } else if (el.rx) {
+      styles.push(`border-radius: ${el.rx}px;`);
     }
-    
+
     // Border
-    if (el.stroke) {
-      styles.push(`border: 1px solid ${el.stroke};`);
-      if (el.strokeWidth) styles.push(`border-width: ${el.strokeWidth}px;`);
+    const sc = strokeColor(el);
+    if (sc) {
+      styles.push(`border: ${el.strokeWidth || 1}px solid ${sc};`);
     }
-    
+
     // Text styles
     if (el.type === 'text') {
+      styles.push(`display: inline-block;`);
       if (el.fontSize) styles.push(`font-size: ${el.fontSize}px;`);
       if (el.fontWeight) styles.push(`font-weight: ${el.fontWeight};`);
       if (el.textColor) styles.push(`color: ${el.textColor};`);
       if (el.textAlign) styles.push(`text-align: ${el.textAlign};`);
+      if (el.lineHeight) styles.push(`line-height: ${el.lineHeight}px;`);
     }
-    
-    // Flexbox
+
+    // Overflow clip for frames
+    if (el.type === 'frame') styles.push(`overflow: hidden;`);
+
+    // Flexbox / auto-layout
     if (el.autoLayout) {
       const layout = el.autoLayout;
-      if (layout.direction === 'horizontal') {
-        styles.push(`display: flex;`);
-        styles.push(`flex-direction: row;`);
-      } else if (layout.direction === 'vertical') {
-        styles.push(`display: flex;`);
-        styles.push(`flex-direction: column;`);
-      }
+      styles.push(`display: flex;`);
+      styles.push(`flex-direction: ${layout.direction === 'horizontal' ? 'row' : 'column'};`);
       if (layout.gap !== undefined) styles.push(`gap: ${layout.gap}px;`);
       if (layout.padding !== undefined) styles.push(`padding: ${layout.padding}px;`);
-      if (layout.align) {
-        const alignMap = {
-          'min': 'flex-start',
-          'center': 'center',
-          'max': 'flex-end',
-          'stretch': 'stretch'
-        };
-        styles.push(`align-items: ${alignMap[layout.align] || 'stretch'};`);
-      }
+      const alignMap = { min:'flex-start', center:'center', max:'flex-end', stretch:'stretch' };
+      if (layout.align) styles.push(`align-items: ${alignMap[layout.align] || 'stretch'};`);
     }
-    
-    if (styles.length > 0) {
-      cssParts.push(`${cssSelector} { ${styles.join(' ')} }`);
-    }
+
+    // Opacity
+    if (el.opacity !== undefined && el.opacity < 100) styles.push(`opacity: ${el.opacity / 100};`);
+
+    cssParts.push(`${cssSelector} { ${styles.join(' ')} }`);
   });
-  
-  // Generate HTML structure
-  const elementMap = {};
-  elements.forEach(el => {
-    elementMap[el.id] = el;
-  });
-  
+
   function buildHTMLElement(el) {
     const children = elements.filter(e => e.parentId === el.id);
     const childHTML = children.map(buildHTMLElement).join('');
-    
+    const tag = htmlTag(el);
+
     const attributes = [`data-canvus-id="${el.id}"`];
     if (el.name) attributes.push(`data-canvus-name="${escHtml(el.name)}"`);
-    if (el.type === 'frame') attributes.push(`data-canvus-role="component"`);
-    
+
     let content = '';
     if (el.type === 'text') {
-      content = escHtml(el.text || '');
+      content = el.html ? el.html : escHtml(el.text || '');
     }
-    
-    return `<${el.type === 'frame' ? 'div' : el.type} ${attributes.join(' ')}>${content}${childHTML}</${el.type === 'frame' ? 'div' : el.type}>`;
+
+    return `<${tag} ${attributes.join(' ')}>${content}${childHTML}</${tag}>`;
   }
-  
+
   htmlParts.push(buildHTMLElement(rootEl));
   
   return {
