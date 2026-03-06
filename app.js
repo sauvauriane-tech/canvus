@@ -1687,8 +1687,8 @@ canvasWrap.addEventListener('contextmenu', ev => {
     items.push({label:'⊘ Detach Instance', fn:`detachInstance(${el.id})`});
   }
   items.push({sep:true});
-  items.push({label:'Duplicate  ⌘D', fn:'duplicateSelected()'});
-  items.push({label:'Delete  Del', fn:'deleteSelected()'});
+  // items.push({label:'Duplicate  ⌘D', fn:'duplicateSelected()'});
+  // items.push({label:'Delete  Del', fn:'deleteSelected()'});
   if (S.selIds.length >= 2) items.push({label:'Group  ⌘G', fn:'groupSelected()'});
 
   items.forEach(it => {
@@ -3542,8 +3542,8 @@ function updateProps() {
   sections.push(`
     <div class="psec">
       <div style="display:flex;gap:5px;">
-        <button class="btn btn-ghost" style="flex:1;font-size:11px;" onclick="duplicateSelected()">Duplicate</button>
-        <button class="btn" style="flex:1;font-size:11px;background:var(--red-bg);color:var(--red);border:1px solid rgba(224,85,85,.25)" onclick="deleteSelected()">Delete</button>
+        <!-- <button class="btn btn-ghost" style="flex:1;font-size:11px;" onclick="duplicateSelected()">Duplicate</button> -->
+        <!-- <button class="btn" style="flex:1;font-size:11px;background:var(--red-bg);color:var(--red);border:1px solid rgba(224,85,85,.25)" onclick="deleteSelected()">Delete</button> -->
       </div>
     </div>
   `);
