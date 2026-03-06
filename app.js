@@ -5711,7 +5711,7 @@ async function runHTMLImport() {
   // ── 1. Render in a sandboxed iframe for accurate layout ───────────────────
   const iframe = document.createElement('iframe');
   iframe.setAttribute('sandbox', 'allow-same-origin');
-  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:1440px;height:5000px;border:none;pointer-events:none;opacity:0;z-index:-9999;';
+  iframe.style.cssText = 'position:fixed;left:0;top:0;width:1440px;height:5000px;border:none;pointer-events:none;opacity:0;z-index:99999;';
   document.body.appendChild(iframe);
 
   const iDoc = iframe.contentDocument;
@@ -5719,6 +5719,8 @@ async function runHTMLImport() {
   iDoc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;}${cssStr}</style></head><body style="margin:0;padding:0;">${htmlStr}</body></html>`);
   iDoc.close();
 
+  // Force layout computation before measuring
+  void iDoc.body.offsetHeight;
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   const iWin    = iframe.contentWindow;
@@ -5765,13 +5767,14 @@ async function runHTMLImport() {
     newEls.push(compFrame);
 
     // Walk children of the component root
+    const compOx = placeX - Math.round(compRect.left);
+    const compOy = placeY - Math.round(compRect.top);
     for (const child of rootDomEl.children) {
-      _htmlWalkNode(child, compFrame.id, compRect, iWin, newEls, unsupported);
+      _htmlWalkNode(child, compFrame.id, compOx, compOy, iWin, newEls, unsupported);
     }
 
     document.body.removeChild(iframe);
     pushUndo();
-    S.els.push(...newEls);
     S.selIds = [compFrame.id];
     renderAll(); updateProps(); updateLayers();
     zoomToSel();
@@ -5789,13 +5792,14 @@ async function runHTMLImport() {
   rootFrame.page  = S.page;
   newEls.push(rootFrame);
 
+  const pageOx = rootFrame.x - Math.round(bodyRect.left);
+  const pageOy = rootFrame.y - Math.round(bodyRect.top);
   for (const child of bodyEl.children) {
-    _htmlWalkNode(child, rootFrame.id, bodyRect, iWin, newEls, unsupported);
+    _htmlWalkNode(child, rootFrame.id, pageOx, pageOy, iWin, newEls, unsupported);
   }
 
   document.body.removeChild(iframe);
   pushUndo();
-  S.els.push(...newEls);
   S.selIds = [rootFrame.id];
   renderAll(); updateProps(); updateLayers();
   zoomToFit();
@@ -5820,7 +5824,7 @@ const _HTML_IMG_TAGS    = new Set(['img','picture']);
 const _HTML_SKIP_TAGS   = new Set(['script','style','head','link','meta','noscript','template','svg','use','defs','path','circle','rect','polygon','br','hr','input','select','textarea','iframe']);
 
 // ─── Recursive DOM walker ─────────────────────────────────────────────────────
-function _htmlWalkNode(domEl, parentId, parentRect, iWin, newEls, unsupported) {
+function _htmlWalkNode(domEl, parentId, ox, oy, iWin, newEls, unsupported) {
   const tag = domEl.tagName?.toLowerCase();
   if (!tag || _HTML_SKIP_TAGS.has(tag)) return;
 
@@ -5829,9 +5833,9 @@ function _htmlWalkNode(domEl, parentId, parentRect, iWin, newEls, unsupported) {
   const h    = Math.round(rect.height);
   if (w < 1 || h < 1) return;
 
-  // Coordinates relative to parent element's top-left
-  const x = Math.round(rect.left - parentRect.left);
-  const y = Math.round(rect.top  - parentRect.top);
+  // Absolute canvas coordinates: iframe position + canvas origin offset
+  const x = Math.round(rect.left) + ox;
+  const y = Math.round(rect.top)  + oy;
 
   const computed = iWin.getComputedStyle(domEl);
   if (computed.display === 'none' || computed.visibility === 'hidden') return;
@@ -5866,7 +5870,7 @@ function _htmlWalkNode(domEl, parentId, parentRect, iWin, newEls, unsupported) {
     // Inline text label as a child text node
     const text = domEl.textContent?.trim() || '';
     if (text) {
-      const lbl        = mkEl('text', 0, 0, w, h);
+      const lbl        = mkEl('text', x, y, w, h);
       lbl.text         = text;
       lbl.name         = el.name + ' Label';
       lbl.parentId     = el.id;
@@ -5910,7 +5914,7 @@ function _htmlWalkNode(domEl, parentId, parentRect, iWin, newEls, unsupported) {
   // Recurse into children (text/button/img content handled inline above)
   if (!_HTML_TEXT_TAGS.has(tag) && !_HTML_BUTTON_TAGS.has(tag) && !_HTML_IMG_TAGS.has(tag)) {
     for (const child of domEl.children) {
-      _htmlWalkNode(child, el.id, rect, iWin, newEls, unsupported);
+      _htmlWalkNode(child, el.id, ox, oy, iWin, newEls, unsupported);
     }
   }
 }
